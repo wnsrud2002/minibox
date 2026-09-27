@@ -1,17 +1,19 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
+	"minibox/internal/cgroup"
 	"minibox/internal/container"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: minibox check | run <image> <cmd> [args...]")
+		fmt.Println("usage: minibox check | run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -20,11 +22,24 @@ func main() {
 			os.Exit(1)
 		}
 	case "run":
-		if len(os.Args) < 4 {
-			fmt.Fprintln(os.Stderr, "usage: minibox run <image> <cmd> [args...]")
+		fs := flag.NewFlagSet("run", flag.ExitOnError)
+		mem := fs.String("mem", "", "메모리 제한 (예: 64m)")
+		cpu := fs.Float64("cpu", 0, "CPU 제한, 코어 수 (예: 0.5)")
+		pids := fs.Int("pids", 0, "프로세스 수 제한")
+		fs.Parse(os.Args[2:])
+		if fs.NArg() < 2 {
+			fmt.Fprintln(os.Stderr, "usage: minibox run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
 			os.Exit(2)
 		}
-		code, err := container.Run(os.Args[2], os.Args[3:])
+		limits := cgroup.Limits{CPU: *cpu, Pids: *pids}
+		if *mem != "" {
+			var err error
+			if limits.Mem, err = cgroup.ParseSize(*mem); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(2)
+			}
+		}
+		code, err := container.Run(fs.Arg(0), limits, fs.Args()[1:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "run:", err)
 		}

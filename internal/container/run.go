@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
+
+	"minibox/internal/cgroup"
 )
 
 // Hostname은 컨테이너 안에서 보이는 호스트네임이다.
@@ -15,7 +19,7 @@ const Hostname = "minibox"
 // Run은 자기 자신(/proc/self/exe)을 "init" 서브커맨드로 다시 실행한다.
 // 새 네임스페이스는 clone 시점에만 만들 수 있으므로, 부모는 네임스페이스를
 // 만들어 자식을 띄우는 일만 하고 실제 설정은 자식(Init)이 안에서 한다.
-func Run(image string, args []string) (int, error) {
+func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	lower, err := filepath.Abs(filepath.Join("images", image))
 	if err != nil {
 		return 1, err
@@ -30,14 +34,45 @@ func Run(image string, args []string) (int, error) {
 	}
 	defer os.RemoveAll(dir)
 
+	cg, err := cgroup.Create(filepath.Base(dir), limits)
+	if err != nil {
+		return 1, fmt.Errorf("cgroup: %w", err)
+	}
+	defer cgroup.Remove(cg)
+	cgFD, err := syscall.Open(cg, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return 1, err
+	}
+	defer syscall.Close(cgFD)
+
 	cmd := exec.Command("/proc/self/exe", append([]string{"init", lower, dir}, args...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 		// minibox가 죽으면 컨테이너도 같이 죽게 한다
 		Pdeathsig: syscall.SIGKILL,
+		// clone 시점에 바로 cgroup 안에서 태어나게 한다(CLONE_INTO_CGROUP).
+		// 띄운 뒤에 cgroup.procs에 PID를 쓰면 그 사이에 제한 없이 fork할 틈이 생긴다.
+		UseCgroupFD: true,
+		CgroupFD:    cgFD,
 	}
-	if err := cmd.Run(); err != nil {
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		return 1, err
+	}
+	// 컨테이너의 PID 1은 핸들러 없는 시그널을 커널이 버려서 Ctrl+C로 안 죽을 수 있다.
+	// minibox가 대신 받아서 SIGKILL로 끝내야 아래 정리(cgroup, 임시 디렉터리)까지 간다.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	go func() {
+		for range sigs {
+			cmd.Process.Kill()
+		}
+	}()
+	err = cmd.Wait()
+	fmt.Fprintln(os.Stderr, "[minibox]", cgroup.Summary(cg, time.Since(start)))
+	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode(), nil
 		}
@@ -104,6 +139,28 @@ func setupRoot(lower, dir string) error {
 	// /proc을 새로 마운트해야 ps가 이 PID 네임스페이스의 프로세스만 보여 준다
 	if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mount /proc: %w", err)
+	}
+	return setupDev()
+}
+
+// setupDev는 /dev를 tmpfs로 새로 만들고 기본 장치 파일만 넣는다.
+// 호스트 /dev를 통째로 보여 주면 디스크 같은 장치까지 컨테이너에서 건드릴 수 있다.
+func setupDev() error {
+	if err := syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID, "mode=755"); err != nil {
+		return fmt.Errorf("mount /dev: %w", err)
+	}
+	for name, dev := range map[string][2]int{
+		"null": {1, 3}, "zero": {1, 5}, "full": {1, 7},
+		"random": {1, 8}, "urandom": {1, 9}, "tty": {5, 0},
+	} {
+		path := "/dev/" + name
+		if err := syscall.Mknod(path, syscall.S_IFCHR|0o666, dev[0]<<8|dev[1]); err != nil {
+			return fmt.Errorf("mknod %s: %w", path, err)
+		}
+		// mknod의 권한은 umask에 깎이므로 다시 맞춘다
+		if err := os.Chmod(path, 0o666); err != nil {
+			return err
+		}
 	}
 	return nil
 }
