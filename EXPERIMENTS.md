@@ -18,3 +18,20 @@
 - **pids 제한이 스레드도 센다:** `tail` 하나인데 `pids.peak`가 5였다. exec 전의 minibox(Go 런타임)가 만든 스레드가 잡혔다.
 - **PID 1이 SIGTERM과 Ctrl+C를 무시:** busybox `timeout`과 `sh -c '명령 하나'`는 둘 다 자기 자신을 명령으로 exec한다. 그래서 무한 루프가 PID 1이 됐다. 커널은 핸들러 없는 시그널을 PID 1에게 전달하지 않으므로 끝나지 않았다(도커 `--init`이 있는 이유). → minibox가 SIGINT와 SIGTERM을 받아 컨테이너를 SIGKILL하고 cgroup과 임시 디렉터리를 정리하게 했다.
 - **swap이 있으면 OOM 대신 느려진다:** Orin Nano에는 8G swapfile이 있다. `memory.swap.max=0`을 함께 걸었다.
+
+## 4주차: 브리지·veth 네트워크 (2026-09-27)
+
+| 확인 | 결과 |
+|---|---|
+| 컨테이너 → 게이트웨이(mb0, 10.88.0.1) | ping 평균 0.19ms |
+| 컨테이너 → 인터넷(8.8.8.8, MASQUERADE) | ping 평균 36.0ms, 손실 0% |
+| 컨테이너 A(10.88.0.2) ↔ B(10.88.0.3) | ping 평균 0.18ms, ttl=64(같은 브리지) |
+| iperf3 A ← B, 10초 | **21.1 Gbits/sec**, 재전송 0, cwnd 최대 1.61MB |
+
+- veth와 브리지는 실제 랜선이 아니라 메모리 복사라서 대역폭이 NIC와 무관하게 수십 Gbps가 나온다. 7주차 장애 주입(손실·tbf)의 기준값으로 쓴다.
+
+### 트러블슈팅
+
+- **Docker 때문에 브리지 안 통신도 FORWARD를 지난다:** Docker가 `br_netfilter`를 켜고 FORWARD 정책을 DROP으로 바꿔 둔다. → 전용 `MINIBOX` 체인을 FORWARD 맨 앞에 끼우고 `-i mb0` 트래픽을 허용했다.
+- **`Chain 'MINIBOX' does not exist`:** 체인을 만들기 전에 점프 규칙부터 넣었다. → 체인 생성을 맨 앞으로 옮겼다.
+- **컨테이너 DNS:** 호스트 resolv.conf는 127.0.0.53(systemd-resolved)이라 컨테이너에서 닿지 않는다. → 컨테이너에 `nameserver 8.8.8.8`을 쓴다.

@@ -3,6 +3,7 @@ package container
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"minibox/internal/cgroup"
+	"minibox/internal/network"
 )
 
 // Hostname은 컨테이너 안에서 보이는 호스트네임이다.
@@ -45,10 +47,27 @@ func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	}
 	defer syscall.Close(cgFD)
 
+	if err := network.Setup(); err != nil {
+		return 1, fmt.Errorf("network: %w", err)
+	}
+	ip, release, err := network.Alloc()
+	if err != nil {
+		return 1, err
+	}
+	defer release()
+	// 네트워크는 부모가 컨테이너 밖에서 설정한다. 그동안 자식은 이 파이프에서
+	// 기다리다가, 부모가 쓰기 쪽을 닫으면(EOF) 그때 사용자 명령을 실행한다.
+	syncR, syncW, err := os.Pipe()
+	if err != nil {
+		return 1, err
+	}
+	defer syncW.Close()
+
 	cmd := exec.Command("/proc/self/exe", append([]string{"init", lower, dir}, args...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.ExtraFiles = []*os.File{syncR} // 자식에게는 fd 3
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
 		// minibox가 죽으면 컨테이너도 같이 죽게 한다
 		Pdeathsig: syscall.SIGKILL,
 		// clone 시점에 바로 cgroup 안에서 태어나게 한다(CLONE_INTO_CGROUP).
@@ -60,6 +79,14 @@ func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 1, err
 	}
+	syncR.Close()
+	if err := network.Attach(cmd.Process.Pid, ip); err != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return 1, fmt.Errorf("network: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "[minibox] IP", ip)
+	syncW.Close()
 	// 컨테이너의 PID 1은 핸들러 없는 시그널을 커널이 버려서 Ctrl+C로 안 죽을 수 있다.
 	// minibox가 대신 받아서 SIGKILL로 끝내야 아래 정리(cgroup, 임시 디렉터리)까지 간다.
 	sigs := make(chan os.Signal, 1)
@@ -91,6 +118,11 @@ func Init(lower, dir string, args []string) error {
 	if err := setupRoot(lower, dir); err != nil {
 		return err
 	}
+	// 부모가 네트워크 설정을 끝낼 때까지 기다린다
+	sync := os.NewFile(3, "sync")
+	io.Copy(io.Discard, sync)
+	sync.Close()
+
 	path, err := exec.LookPath(args[0])
 	if err != nil {
 		return err
@@ -140,7 +172,11 @@ func setupRoot(lower, dir string) error {
 	if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mount /proc: %w", err)
 	}
-	return setupDev()
+	if err := setupDev(); err != nil {
+		return err
+	}
+	// 호스트의 resolv.conf는 127.0.0.53(systemd-resolved)이라 컨테이너에서 닿지 않는다
+	return os.WriteFile("/etc/resolv.conf", []byte("nameserver 8.8.8.8\n"), 0o644)
 }
 
 // setupDev는 /dev를 tmpfs로 새로 만들고 기본 장치 파일만 넣는다.
