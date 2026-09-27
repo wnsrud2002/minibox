@@ -59,25 +59,66 @@ func Setup() error {
 
 // Alloc은 10.88.0.2~254 중 빈 IP 하나를 잡는다.
 // /run/minibox/ips/<IP> 파일을 O_EXCL로 만들어서, 동시에 떠도 같은 IP를 받지 않는다.
-// ponytail: minibox가 kill -9로 죽으면 파일이 남는다. 8주차 minibox gc에서 치운다.
-func Alloc() (ip string, release func(), err error) {
+// 파일 내용은 컨테이너 ID다. minibox가 kill -9로 죽어 파일이 남으면 minibox gc가 이걸 보고 치운다.
+func Alloc(id string) (ip string, release func(), err error) {
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		return "", nil, err
 	}
 	for i := 2; i < 255; i++ {
 		ip := fmt.Sprintf("10.88.0.%d", i)
 		path := filepath.Join(ipDir, ip)
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL, 0o644)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if errors.Is(err, os.ErrExist) {
 			continue
 		}
 		if err != nil {
 			return "", nil, err
 		}
+		_, err = f.WriteString(id)
 		f.Close()
+		if err != nil {
+			os.Remove(path)
+			return "", nil, err
+		}
 		return ip, func() { os.Remove(path) }, nil
 	}
 	return "", nil, errors.New("남은 IP 없음")
+}
+
+// IPs는 할당된 IP를 컨테이너 ID → IP로 돌려준다. ID가 없는(옛 형식) 파일은 키가 ""다.
+func IPs() map[string]string {
+	m := map[string]string{}
+	files, _ := filepath.Glob(filepath.Join(ipDir, "*"))
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		m[string(b)] = filepath.Base(f)
+	}
+	return m
+}
+
+// ReleaseStale은 목록에 없는 컨테이너가 잡고 있던 IP 파일을 지우고, 지운 IP를 돌려준다.
+func ReleaseStale(live map[string]bool) []string {
+	var freed []string
+	files, _ := filepath.Glob(filepath.Join(ipDir, "*"))
+	for _, f := range files {
+		if b, _ := os.ReadFile(f); !live[string(b)] && os.Remove(f) == nil {
+			freed = append(freed, filepath.Base(f))
+		}
+	}
+	return freed
+}
+
+// Teardown은 mb0 브리지와 MINIBOX 체인을 전부 지운다. 컨테이너가 없을 때만 부른다.
+func Teardown() {
+	for _, args := range [][]string{
+		{"-D", chain, "-j", chaosChain}, {"-F", chaosChain}, {"-X", chaosChain},
+		{"-D", "FORWARD", "-j", chain}, {"-F", chain}, {"-X", chain},
+		{"-t", "nat", "-D", "POSTROUTING", "-j", chain}, {"-t", "nat", "-F", chain}, {"-t", "nat", "-X", chain},
+	} {
+		// 이미 없으면 에러가 나지만 상관없다
+		exec.Command("iptables", args...).Run()
+	}
+	exec.Command("ip", "link", "del", Bridge).Run()
 }
 
 // Attach는 veth 쌍을 만들어 한쪽은 mb0에, 다른 쪽은 pid의 net 네임스페이스에 꽂고

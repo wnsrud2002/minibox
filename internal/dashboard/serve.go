@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +64,7 @@ func snapshot() []container {
 	list := []container{}
 	for _, dir := range cgroup.List() {
 		c := container{ID: filepath.Base(dir), Usage: cgroup.Read(dir), Isolated: map[string]bool{}}
-		c.PID = initPID(dir)
+		c.PID = cgroup.InitPID(dir)
 		if c.PID > 0 {
 			cmd, _ := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", c.PID))
 			c.Cmd = strings.TrimSpace(strings.ReplaceAll(string(cmd), "\x00", " "))
@@ -81,20 +80,4 @@ func snapshot() []container {
 		list = append(list, c)
 	}
 	return list
-}
-
-// initPID는 cgroup 안에서 컨테이너 PID 네임스페이스의 1번 프로세스를 찾는다.
-// /proc/<pid>/status의 NSpid 줄 마지막 값이 안쪽 네임스페이스에서 본 PID다.
-func initPID(dir string) int {
-	b, _ := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
-	for _, p := range strings.Fields(string(b)) {
-		status, _ := os.ReadFile("/proc/" + p + "/status")
-		for _, line := range strings.Split(string(status), "\n") {
-			if f := strings.Fields(line); len(f) > 2 && f[0] == "NSpid:" && f[len(f)-1] == "1" {
-				pid, _ := strconv.Atoi(p)
-				return pid
-			}
-		}
-	}
-	return 0
 }

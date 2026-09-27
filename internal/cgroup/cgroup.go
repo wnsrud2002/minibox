@@ -166,3 +166,31 @@ func List() []string {
 	dirs, _ := filepath.Glob(filepath.Join(root, "minibox-*"))
 	return dirs
 }
+
+// InitPID는 cgroup 안에서 컨테이너 PID 네임스페이스의 1번 프로세스를 찾는다.
+// /proc/<pid>/status의 NSpid 줄 마지막 값이 안쪽 네임스페이스에서 본 PID다.
+func InitPID(dir string) int {
+	b, _ := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+	for _, p := range strings.Fields(string(b)) {
+		status, _ := os.ReadFile("/proc/" + p + "/status")
+		for _, line := range strings.Split(string(status), "\n") {
+			if f := strings.Fields(line); len(f) > 2 && f[0] == "NSpid:" && f[len(f)-1] == "1" {
+				pid, _ := strconv.Atoi(p)
+				return pid
+			}
+		}
+	}
+	return 0
+}
+
+// Kill은 cgroup 안의 모든 프로세스를 SIGKILL한다. 컨테이너를 띄운 minibox는
+// PID 1이 죽은 걸 보고 평소처럼 정리(cgroup, 임시 디렉터리, IP)를 한다.
+func Kill(dir string) error {
+	return write(dir, "cgroup.kill", "1")
+}
+
+// Empty는 cgroup 안에 프로세스가 하나도 없는지 알려 준다.
+func Empty(dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+	return err == nil && strings.TrimSpace(string(b)) == ""
+}

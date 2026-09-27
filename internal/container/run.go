@@ -50,7 +50,7 @@ func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	if err := network.Setup(); err != nil {
 		return 1, fmt.Errorf("network: %w", err)
 	}
-	ip, release, err := network.Alloc()
+	ip, release, err := network.Alloc(filepath.Base(dir))
 	if err != nil {
 		return 1, err
 	}
@@ -90,7 +90,8 @@ func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	// 컨테이너의 PID 1은 핸들러 없는 시그널을 커널이 버려서 Ctrl+C로 안 죽을 수 있다.
 	// minibox가 대신 받아서 SIGKILL로 끝내야 아래 정리(cgroup, 임시 디렉터리)까지 간다.
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	// SIGHUP: 터미널 창을 닫으면 온다
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigs)
 	go func() {
 		for range sigs {
