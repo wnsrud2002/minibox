@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>패킷 여행기</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --card: #ffffff; --grid: #e6e5e1; --band: #f3f2ef;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+  --c2s: #2a78d6; --s2c: #eb6834; --hl: #fff4d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #1a1a19; --card: #232322; --grid: #383835; --band: #2a2a28;
+    --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+    --c2s: #3987e5; --s2c: #d95926; --hl: #3d3522;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19; --card: #232322; --grid: #383835; --band: #2a2a28;
+  --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+  --c2s: #3987e5; --s2c: #d95926; --hl: #3d3522;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--text-2); margin: 0 0 16px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+select, button, input[type=file] { font: inherit; color: inherit; }
+select, button { background: var(--card); border: 1px solid var(--grid); border-radius: 6px; padding: 4px 10px; }
+button { cursor: pointer; }
+#drop { border: 1px dashed var(--muted); border-radius: 10px; padding: 16px; color: var(--text-2); }
+#drop.over { background: var(--band); }
+#err { color: #d03b3b; }
+.legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; }
+.key { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; }
+#diagram { background: var(--card); border: 1px solid var(--grid); border-radius: 10px; overflow-x: auto; }
+#diagram svg { display: block; }
+.arrow { transition: stroke-dashoffset var(--dur, 500ms) linear; }
+.future { opacity: 0; }
+table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 3px 12px 3px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; }
+tr.cur { background: var(--hl); }
+.tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>패킷 여행기</h1>
+  <p class="sub">tcpdump로 캡처한 pcap을 브라우저에서 직접 파싱해, TCP 연결 하나를 시퀀스 다이어그램으로 재생합니다.</p>
+
+  <div id="drop">pcap 파일을 여기에 끌어다 놓거나 <input type="file" id="file" accept=".pcap,.cap"></div>
+  <p id="err"></p>
+
+  <div id="player" hidden>
+    <div class="row">
+      <label>연결 <select id="flow"></select></label>
+    </div>
+    <div class="row">
+      <button id="play">▶ 재생</button>
+      <button id="prev">◀ 한 칸</button>
+      <button id="next">한 칸 ▶</button>
+      <button id="all">전부 보기</button>
+      <label>속도 <select id="speed"><option value="2">느리게</option><option value="1" selected>보통</option><option value="0.4">빠르게</option></select></label>
+      <span id="pos" style="color:var(--text-2)"></span>
+    </div>
+    <div class="legend">
+      <span><span class="key" style="background:var(--c2s)"></span>클라이언트 → 서버</span>
+      <span><span class="key" style="background:var(--s2c)"></span>서버 → 클라이언트</span>
+    </div>
+    <div id="diagram"></div>
+    <div class="tablewrap"><table id="table"></table></div>
+  </div>
+</main>
+<script type="module">
+import { parsePcap, groupFlows } from "./pcap.js";
+
+const PHASE = { handshake: "연결 수립 (3-way)", data: "데이터 전송", close: "연결 종료" };
+const ROW = 36, TOP = 56, BAND = 120;
+let flows = [], flowSel, step = -1, timer = null;
+
+// 파일 선택, 끌어다 놓기, ?src=URL 세 가지로 pcap을 받는다
+file.onchange = () => file.files[0] && file.files[0].arrayBuffer().then(load);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0]?.arrayBuffer().then(load); };
+const src = new URLSearchParams(location.search).get("src");
+if (src) fetch(src).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${src}: ${r.status}`))).then(load).catch(e => err.textContent = e.message);
+
+function load(buf) {
+  err.textContent = "";
+  try {
+    const t = performance.now();
+    const pkts = parsePcap(buf);
+    flows = groupFlows(pkts).filter(f => f.packets.length > 1).sort((a, b) => b.packets.length - a.packets.length);
+    console.log(`파싱 ${pkts.length}패킷, ${(performance.now() - t).toFixed(1)}ms`);
+  } catch (e) { err.textContent = e.message; return; }
+  if (!flows.length) { err.textContent = "TCP 연결을 찾지 못했습니다."; return; }
+  flow.innerHTML = flows.map((f, i) => `<option value="${i}">${f.client} → ${f.server} (${f.packets.length}패킷)</option>`).join("");
+  player.hidden = false;
+  select(0);
+}
+flow.onchange = () => select(+flow.value);
+
+function select(i) {
+  stop();
+  flowSel = flows[i];
+  render();
+  go(-1);
+}
+
+// 두 호스트를 세로선으로 두고, 패킷마다 한 줄씩 비스듬한 화살표를 긋는다
+function render() {
+  const ps = flowSel.packets;
+  const W = Math.max(640, diagram.clientWidth), L = BAND + 60, R = W - 100;
+  const H = TOP + ps.length * ROW + 24;
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  // 단계 띠: 같은 phase가 이어지는 구간마다 왼쪽에 이름을 붙인다
+  for (let i = 0; i < ps.length;) {
+    let j = i; while (j < ps.length && ps[j].phase === ps[i].phase) j++;
+    const y0 = TOP + i * ROW, y1 = TOP + j * ROW;
+    s += `<rect x="0" y="${y0}" width="${W}" height="${y1 - y0}" fill="${ps[i].phase === "data" ? "none" : "var(--band)"}"/>`;
+    s += `<text x="12" y="${y0 + 20}" font-size="12" fill="var(--text-2)">${PHASE[ps[i].phase]}</text>`;
+    i = j;
+  }
+  s += `<text x="${L}" y="22" text-anchor="middle" font-weight="600" fill="var(--text)">클라이언트</text><text x="${L}" y="40" text-anchor="middle" font-size="12" fill="var(--text-2)">${flowSel.client}</text>`;
+  s += `<text x="${R}" y="22" text-anchor="middle" font-weight="600" fill="var(--text)">서버</text><text x="${R}" y="40" text-anchor="middle" font-size="12" fill="var(--text-2)">${flowSel.server}</text>`;
+  s += `<line x1="${L}" x2="${L}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/><line x1="${R}" x2="${R}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/>`;
+  s += `<defs>${["c2s", "s2c"].map(d => `<marker id="h-${d}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--${d})"/></marker>`).join("")}</defs>`;
+  ps.forEach((p, i) => {
+    const y = TOP + i * ROW + 10, [x1, x2] = p.dir === "c2s" ? [L, R] : [R, L];
+    s += `<g id="p${i}" class="future">
+      <line class="arrow" x1="${x1}" y1="${y}" x2="${x2}" y2="${y + ROW - 14}" stroke="var(--${p.dir})" stroke-width="2" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" marker-end="url(#h-${p.dir})"/>
+      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--card)" stroke-width="4">${p.label}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
+      <text x="${W - 8}" y="${y + 8}" text-anchor="end" font-size="11" fill="var(--muted)">+${(p.t * 1000).toFixed(3)}ms</text>
+    </g>`;
+  });
+  diagram.innerHTML = s + "</svg>";
+
+  table.innerHTML = `<tr><th>#</th><th>시간(ms)</th><th>방향</th><th>내용</th><th>seq</th><th>ack</th><th>윈도우</th><th>길이</th></tr>` +
+    ps.map((p, i) => `<tr id="r${i}"><td>${p.no}</td><td>${(p.t * 1000).toFixed(3)}</td><td>${p.dir === "c2s" ? "클라이언트 → 서버" : "서버 → 클라이언트"}</td><td>${p.label}</td><td>${p.rseq}</td><td>${p.rack ?? ""}</td><td>${p.win}</td><td>${p.len}</td></tr>`).join("");
+}
+
+// go(i): 0..i번 패킷까지 보이게 한다. i번은 화살표가 날아가는 애니메이션으로 그린다.
+function go(i, animate = true) {
+  const ps = flowSel.packets;
+  step = Math.max(-1, Math.min(ps.length - 1, i));
+  const dur = 500 * +speed.value;
+  ps.forEach((_, k) => {
+    const g = document.getElementById("p" + k), line = g.querySelector(".arrow");
+    g.classList.toggle("future", k > step);
+    line.style.setProperty("--dur", k === step && animate ? dur + "ms" : "0ms");
+    // 한 프레임 뒤에 offset을 바꿔야 transition이 걸린다
+    requestAnimationFrame(() => line.setAttribute("stroke-dashoffset", k <= step ? 0 : 1));
+    document.getElementById("r" + k).classList.toggle("cur", k === step);
+  });
+  pos.textContent = `${step + 1} / ${ps.length}`;
+  document.getElementById("p" + Math.max(step, 0)).scrollIntoView({ block: "nearest" });
+}
+
+function stop() { clearInterval(timer); timer = null; play.textContent = "▶ 재생"; }
+play.onclick = () => {
+  if (timer) return stop();
+  if (step >= flowSel.packets.length - 1) go(-1);
+  play.textContent = "⏸ 멈춤";
+  const tick = () => { go(step + 1); if (step >= flowSel.packets.length - 1) stop(); };
+  tick();
+  timer = setInterval(tick, 700 * +speed.value);
+};
+prev.onclick = () => { stop(); go(step - 1, false); };
+next.onclick = () => { stop(); go(step + 1); };
+all.onclick = () => { stop(); go(flowSel.packets.length - 1, false); };
+</script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"minibox/internal/cgroup"
+	"minibox/web"
 )
 
 //go:embed index.html
@@ -35,6 +36,9 @@ func Serve(addr string) error {
 		w.Write(page)
 	})
 	http.HandleFunc("/events", events)
+	http.Handle("/travel/", http.StripPrefix("/travel/", http.FileServer(http.FS(web.FS))))
+	// tcpdump로 captures/에 저장한 파일을 여행기에서 ?src=/captures/x.pcap으로 연다
+	http.Handle("/captures/", http.StripPrefix("/captures/", http.FileServer(http.Dir("captures"))))
 	fmt.Printf("대시보드: http://%s\n", addr)
 	return http.ListenAndServe(addr, nil)
 }
