@@ -5,6 +5,7 @@ Go로 만든 미니 컨테이너 런타임과, 그 위를 오가는 TCP 패킷�
 컨테이너(namespace, cgroup, overlayfs, veth)를 직접 만들고, 그 네트워크에 패킷 손실을 주입해 TCP가 어떻게 버티는지를 패킷 단위로 보여 준다.
 
 **▶ [패킷 여행기 바로 체험하기](https://wnsrud2002.github.io/minibox/)** (설치 없이, 샘플 캡처 포함)
+**📖 [학습 가이드: minibox로 배우는 컨테이너와 TCP](docs/LEARN.md)**: 네임스페이스, cgroup, overlayfs, veth, TCP 재전송과 SACK를 배경지식부터 설명한다
 
 ![10% 손실 중 300KB 전송을 재생한 패킷 여행기](docs/travel.png)
 
