@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>minibox 대시보드</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --card: #ffffff; --grid: #e6e5e1;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+  --series-1: #2a78d6; --series-2: #eb6834;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #1a1a19; --card: #232322; --grid: #383835;
+    --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+    --series-1: #3987e5; --series-2: #d95926;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19; --card: #232322; --grid: #383835;
+  --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+  --series-1: #3987e5; --series-2: #d95926;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+#conn { color: var(--text-2); font-size: 13px; }
+.empty { color: var(--text-2); padding: 32px 0; }
+.card { background: var(--card); border: 1px solid var(--grid); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.card h2 { font-size: 15px; margin: 0; font-family: ui-monospace, monospace; }
+.meta { color: var(--text-2); font-size: 13px; overflow-wrap: anywhere; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; }
+.tile .label { color: var(--text-2); font-size: 12px; }
+.tile .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .limit { color: var(--muted); font-size: 12px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; margin-right: 12px; }
+.badge i { font-style: normal; width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 11px; display: inline-grid; place-items: center; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.chart { position: relative; }
+.chart .title { font-size: 12px; color: var(--text-2); }
+.chart svg { width: 100%; height: 110px; display: block; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--grid); border-radius: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+th, td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-2); font-weight: 500; }
+td.ns { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>minibox</h1><span id="conn">연결 중…</span></header>
+  <div id="list"></div>
+</main>
+<script>
+const HISTORY = 60;          // 그래프에 남길 초
+const hist = {};             // id → { t, usec, cpu[], mem[] }
+const nsNames = { pid: "PID", uts: "호스트네임", mnt: "마운트", net: "네트워크", ipc: "IPC", user: "사용자", cgroup: "cgroup", time: "시간" };
+const MiB = 1 << 20;
+
+const es = new EventSource("/events");
+es.onopen = () => conn.textContent = "실시간 (1초마다 갱신)";
+es.onerror = () => conn.textContent = "연결 끊김 · 다시 연결하는 중";
+es.onmessage = e => render(JSON.parse(e.data));
+
+function render(cs) {
+  const now = performance.now();
+  for (const c of cs) {
+    const h = hist[c.id] ??= { cpu: [], mem: [] };
+    // cpu.stat은 누적 사용 시간이라, 직전 값과의 차이를 경과 시간으로 나눠 코어 수를 구한다
+    if (h.t) push(h.cpu, (c.cpuUsec - h.usec) / ((now - h.t) * 1000));
+    h.t = now; h.usec = c.cpuUsec;
+    push(h.mem, c.mem / MiB);
+  }
+  for (const id in hist) if (!cs.some(c => c.id === id)) delete hist[id];
+
+  if (!cs.length) {
+    list.innerHTML = '<p class="empty">실행 중인 컨테이너가 없습니다. <code>sudo ./minibox run alpine /bin/sh</code>로 띄워 보세요.</p>';
+    return;
+  }
+  // 카드는 컨테이너가 바뀔 때만 새로 만들고, 그 외에는 값만 갈아 끼운다(호버 상태 유지)
+  const ids = cs.map(c => c.id).join();
+  if (list.dataset.ids !== ids) {
+    list.dataset.ids = ids;
+    list.innerHTML = cs.map(card).join("");
+    for (const c of cs) for (const k of ["cpu", "mem"]) hover(document.getElementById(`${k}-${c.id}`));
+  }
+  for (const c of cs) update(c);
+}
+
+function push(a, v) { a.push(v); if (a.length > HISTORY) a.shift(); }
+
+function card(c) {
+  return `<section class="card">
+    <h2>${c.id}</h2>
+    <div class="meta">PID ${c.pid} (호스트 기준) · <code>${esc(c.cmd)}</code></div>
+    <div class="tiles">
+      <div class="tile"><div class="label">CPU</div><div class="value" id="v-cpu-${c.id}"></div><div class="limit">${c.cpuLimit ? `한도 ${c.cpuLimit.toFixed(2)}코어` : "제한 없음"}</div></div>
+      <div class="tile"><div class="label">메모리</div><div class="value" id="v-mem-${c.id}"></div><div class="limit">${c.memLimit ? `한도 ${(c.memLimit / MiB).toFixed(0)} MiB` : "제한 없음"}</div></div>
+      <div class="tile"><div class="label">프로세스·스레드</div><div class="value" id="v-pids-${c.id}"></div><div class="limit">${c.pidsLimit ? `한도 ${c.pidsLimit}` : "제한 없음"}</div></div>
+      <div class="tile"><div class="label">이벤트</div><div id="v-ev-${c.id}" style="margin-top:6px"></div></div>
+    </div>
+    <div class="charts">
+      <div class="chart"><div class="title">CPU (코어), 최근 ${HISTORY}초</div><svg id="cpu-${c.id}"></svg><div class="tip"></div></div>
+      <div class="chart"><div class="title">메모리 (MiB), 최근 ${HISTORY}초</div><svg id="mem-${c.id}"></svg><div class="tip"></div></div>
+    </div>
+    <table><tr><th>네임스페이스</th><th>호스트와 비교</th></tr>
+      ${Object.keys(nsNames).map(ns => `<tr><td class="ns">${ns}</td><td>${isoCell(c.isolated[ns])} <span style="color:var(--muted)">${nsNames[ns]}</span></td></tr>`).join("")}
+    </table>
+  </section>`;
+}
+
+function update(c) {
+  const h = hist[c.id];
+  const cpu = h.cpu.at(-1);
+  document.getElementById(`v-cpu-${c.id}`).textContent = cpu === undefined ? "–" : `${cpu.toFixed(2)}코어`;
+  document.getElementById(`v-mem-${c.id}`).textContent = `${(c.mem / MiB).toFixed(1)} MiB`;
+  document.getElementById(`v-pids-${c.id}`).textContent = c.pids;
+  document.getElementById(`v-ev-${c.id}`).innerHTML =
+    badge(c.oomKill, "critical", "!", `OOM kill ${c.oomKill}회`, "OOM 없음") + "<br>" +
+    badge(c.forkFail, "warning", "!", `fork 차단 ${c.forkFail}회`, "fork 차단 없음");
+  draw(document.getElementById(`cpu-${c.id}`), h.cpu, c.cpuLimit, v => `${v.toFixed(2)}코어`);
+  draw(document.getElementById(`mem-${c.id}`), h.mem, c.memLimit / MiB, v => `${v.toFixed(1)} MiB`);
+}
+
+// 상태 색은 항상 아이콘과 글자를 같이 붙인다(색만으로 뜻을 전하지 않게)
+function badge(n, level, icon, on, off) {
+  return n > 0
+    ? `<span class="badge"><i style="background:var(--${level})">${icon}</i>${on}</span>`
+    : `<span class="badge"><i style="background:var(--good)">✓</i>${off}</span>`;
+}
+function isoCell(v) {
+  if (v === undefined) return '<span class="badge">? 알 수 없음 (sudo로 serve 실행)</span>';
+  return v ? '<span class="badge"><i style="background:var(--good)">✓</i>분리됨</span>'
+           : '<span class="badge"><i style="background:var(--muted)">=</i>호스트와 공유</span>';
+}
+function esc(s) { return s.replace(/[&<>"]/g, ch => `&#${ch.charCodeAt(0)};`); }
+
+// 단일 시리즈 선 그래프. 한도가 있으면 가로 기준선으로 그린다.
+function draw(svg, data, limit, fmt) {
+  const W = svg.clientWidth || 300, H = 110, pad = { l: 44, r: 8, t: 8, b: 16 };
+  const max = niceMax(Math.max(limit || 0, ...data, 0.0001) * 1.1);
+  const x = i => pad.l + (W - pad.l - pad.r) * (i + HISTORY - data.length) / (HISTORY - 1);
+  const y = v => pad.t + (H - pad.t - pad.b) * (1 - v / max);
+  const color = svg.id.startsWith("cpu") ? "var(--series-1)" : "var(--series-2)";
+  let s = "";
+  for (const t of [0, max / 2, max]) {
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${pad.l - 6}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${+t.toFixed(2)}</text>`;
+  }
+  if (limit) {
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(limit)}" y2="${y(limit)}" stroke="var(--text-2)" stroke-width="1"/>`;
+    s += `<text x="${W - pad.r}" y="${y(limit) - 4}" text-anchor="end" font-size="11" fill="var(--text-2)">한도</text>`;
+  }
+  if (data.length) {
+    const pts = data.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    s += `<polygon points="${x(0)},${y(0)} ${pts} ${x(data.length - 1)},${y(0)}" fill="${color}" opacity="0.1"/>`;
+    s += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s += `<circle cx="${x(data.length - 1)}" cy="${y(data.at(-1))}" r="4" fill="${color}" stroke="var(--card)" stroke-width="2"/>`;
+  }
+  s += `<g class="cross" style="display:none"><line y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)" stroke-width="1"/><circle r="4" fill="${color}" stroke="var(--card)" stroke-width="2"/></g>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = s;
+  Object.assign(svg, { _data: data, _x: x, _y: y, _fmt: fmt, _pad: pad, _W: W });
+  if (svg._hoverX !== undefined) showCross(svg, svg._hoverX);
+}
+function niceMax(v) { const p = 10 ** Math.floor(Math.log10(v)); return Math.ceil(v / p) * p; }
+
+// 십자선 + 툴팁: 마우스에서 가장 가까운 초의 값을 보여 준다
+function hover(svg) {
+  svg.addEventListener("pointermove", e => { svg._hoverX = e.clientX - svg.getBoundingClientRect().left; showCross(svg, svg._hoverX); });
+  svg.addEventListener("pointerleave", () => { svg._hoverX = undefined; svg.querySelector(".cross").style.display = "none"; svg.nextElementSibling.style.display = "none"; });
+}
+function showCross(svg, px) {
+  const d = svg._data, tip = svg.nextElementSibling, cross = svg.querySelector(".cross");
+  if (!d || !d.length) return;
+  const step = (svg._W - svg._pad.l - svg._pad.r) / (HISTORY - 1);
+  const i = Math.max(0, Math.min(d.length - 1, Math.round((px - svg._x(0)) / step)));
+  const cx = svg._x(i), cy = svg._y(d[i]);
+  cross.style.display = "";
+  cross.querySelector("line").setAttribute("x1", cx); cross.querySelector("line").setAttribute("x2", cx);
+  cross.querySelector("circle").setAttribute("cx", cx); cross.querySelector("circle").setAttribute("cy", cy);
+  tip.style.display = "block";
+  tip.textContent = `${d.length - 1 - i}초 전 · ${svg._fmt(d[i])}`;
+  tip.style.left = Math.min(cx + 8, svg._W - tip.offsetWidth) + "px";
+  tip.style.top = (svg.offsetTop + cy - 28) + "px";
+}
+</script>
+</body>
+</html>

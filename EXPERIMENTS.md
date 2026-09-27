@@ -35,3 +35,17 @@
 - **Docker 때문에 브리지 안 통신도 FORWARD를 지난다:** Docker가 `br_netfilter`를 켜고 FORWARD 정책을 DROP으로 바꿔 둔다. → 전용 `MINIBOX` 체인을 FORWARD 맨 앞에 끼우고 `-i mb0` 트래픽을 허용했다.
 - **`Chain 'MINIBOX' does not exist`:** 체인을 만들기 전에 점프 규칙부터 넣었다. → 체인 생성을 맨 앞으로 옮겼다.
 - **컨테이너 DNS:** 호스트 resolv.conf는 127.0.0.53(systemd-resolved)이라 컨테이너에서 닿지 않는다. → 컨테이너에 `nameserver 8.8.8.8`을 쓴다.
+
+## 5주차: 대시보드 (2026-09-27)
+
+`--mem 64m --cpu 0.5 --pids 20` 컨테이너 하나로 데모 시나리오 2~3번을 대시보드에서 확인했다.
+
+| 확인 | 결과 |
+|---|---|
+| CPU 무한 루프 15초 | 누적 7.79초 사용, 0.5코어 한도선에서 평탄 |
+| `tail /dev/zero` | oom_kill 1, tail만 죽고 쉘(PID 1)은 생존 |
+| fork bomb 3초 | fork 차단 27회 |
+| 네임스페이스 | pid·uts·mnt·net·ipc 분리, user·cgroup·time은 호스트와 공유 |
+
+- 네임스페이스 분리 여부는 `/proc/<pid>/ns/*` 링크의 inode를 `minibox serve` 자신의 것과 비교해 판단한다.
+- 컨테이너 PID 1은 cgroup.procs의 PID 중 `/proc/<pid>/status`의 `NSpid` 마지막 값이 1인 것으로 찾는다.

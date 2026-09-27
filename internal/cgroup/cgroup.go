@@ -129,3 +129,40 @@ func keyed(dir, file, key string) int64 {
 	}
 	return 0
 }
+
+// Usage는 대시보드에 보낼 한 시점의 사용량이다. 제한 값의 0은 "제한 없음"이다.
+type Usage struct {
+	CPUUsec   int64   `json:"cpuUsec"`
+	CPULimit  float64 `json:"cpuLimit"`
+	Mem       int64   `json:"mem"`
+	MemLimit  int64   `json:"memLimit"`
+	Pids      int64   `json:"pids"`
+	PidsLimit int64   `json:"pidsLimit"`
+	OOMKill   int64   `json:"oomKill"`
+	ForkFail  int64   `json:"forkFail"`
+}
+
+// Read는 cgroup 파일에서 현재 사용량을 읽는다. "max"는 파싱에 실패해 0(제한 없음)이 된다.
+func Read(dir string) Usage {
+	u := Usage{
+		CPUUsec:   keyed(dir, "cpu.stat", "usage_usec"),
+		Mem:       single(dir, "memory.current"),
+		MemLimit:  single(dir, "memory.max"),
+		Pids:      single(dir, "pids.current"),
+		PidsLimit: single(dir, "pids.max"),
+		OOMKill:   keyed(dir, "memory.events", "oom_kill"),
+		ForkFail:  keyed(dir, "pids.events", "max"),
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "cpu.max"))
+	var quota, period float64
+	if n, _ := fmt.Sscanf(string(b), "%f %f", &quota, &period); n == 2 && period > 0 {
+		u.CPULimit = quota / period
+	}
+	return u
+}
+
+// List는 지금 떠 있는 컨테이너의 cgroup 디렉터리를 돌려준다.
+func List() []string {
+	dirs, _ := filepath.Glob(filepath.Join(root, "minibox-*"))
+	return dirs
+}

@@ -9,11 +9,12 @@ import (
 
 	"minibox/internal/cgroup"
 	"minibox/internal/container"
+	"minibox/internal/dashboard"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: minibox check | run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
+		fmt.Println("usage: minibox check | serve [--addr :7070] | run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -44,6 +45,14 @@ func main() {
 			fmt.Fprintln(os.Stderr, "run:", err)
 		}
 		os.Exit(code)
+	case "serve":
+		fs := flag.NewFlagSet("serve", flag.ExitOnError)
+		addr := fs.String("addr", "0.0.0.0:7070", "대시보드 주소")
+		fs.Parse(os.Args[2:])
+		if err := dashboard.Serve(*addr); err != nil {
+			fmt.Fprintln(os.Stderr, "serve:", err)
+			os.Exit(1)
+		}
 	case "init":
 		// run이 내부적으로 부르는 서브커맨드. 새 네임스페이스 안에서 실행된다.
 		if err := container.Init(os.Args[2], os.Args[3], os.Args[4:]); err != nil {

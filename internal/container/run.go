@@ -67,7 +67,7 @@ func Run(image string, limits cgroup.Limits, args []string) (int, error) {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.ExtraFiles = []*os.File{syncR} // 자식에게는 fd 3
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
 		// minibox가 죽으면 컨테이너도 같이 죽게 한다
 		Pdeathsig: syscall.SIGKILL,
 		// clone 시점에 바로 cgroup 안에서 태어나게 한다(CLONE_INTO_CGROUP).
