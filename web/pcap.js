@@ -2,6 +2,8 @@
 // 브라우저와 node 양쪽에서 쓰려고 의존성 없는 ES 모듈로 둔다.
 
 const FLAG = { FIN: 1, SYN: 2, RST: 4, PSH: 8, ACK: 16 };
+const RTO_GAP = 0.15; // 이만큼(초) 조용하다가 재전송하면 타임아웃으로 본다. 리눅스 최소 RTO는 200ms다.
+const RETRANS = { fast: "빠른 재전송", timeout: "타임아웃 재전송", recovery: "타임아웃 후 복구 재전송" };
 
 // parsePcap은 pcap 파일 바이트에서 TCP 세그먼트만 뽑아낸다.
 export function parsePcap(buf) {
@@ -49,6 +51,7 @@ function parseFrame(v, o, len) {
   const dataOff = (v.getUint8(tcp + 12) >> 4) * 4;
   const flags = v.getUint8(tcp + 13);
   return {
+    sack: parseSack(v, tcp + 20, Math.min(tcp + dataOff, o + len)),
     src: ipStr(v, ip + 12), dst: ipStr(v, ip + 16),
     sport: v.getUint16(tcp), dport: v.getUint16(tcp + 2),
     seq: v.getUint32(tcp + 4), ack: v.getUint32(tcp + 8),
@@ -56,6 +59,22 @@ function parseFrame(v, o, len) {
     // 캡처 길이가 잘려도(snaplen) 실제 길이는 IP 헤더의 total length로 안다
     len: totalLen - ihl - dataOff,
   };
+}
+
+// TCP 옵션에서 SACK 블록([왼쪽, 오른쪽) seq 쌍)만 뽑는다. 수신자가 "여기는 받았다"고 알리는 구간이다.
+function parseSack(v, o, end) {
+  const blocks = [];
+  while (o < end) {
+    const kind = v.getUint8(o);
+    if (kind === 0) break;          // 옵션 끝
+    if (kind === 1) { o++; continue; } // NOP
+    if (o + 1 >= end) break;
+    const len = v.getUint8(o + 1);
+    if (len < 2 || o + len > end) break;
+    if (kind === 5) for (let b = o + 2; b + 8 <= o + len; b += 8) blocks.push([v.getUint32(b), v.getUint32(b + 4)]);
+    o += len;
+  }
+  return blocks;
 }
 
 function ipStr(v, o) {
@@ -86,12 +105,53 @@ function annotate(f) {
     p.dir = from === f.client ? "c2s" : "s2c";
     isn[p.dir] ??= p.seq;
   }
-  let phase = "handshake";
+  // 방향별 상태: 보낸 가장 먼 seq 끝, 마지막으로 보낸 ack·윈도우, 연속 중복 ACK 수
+  const st = { c2s: { end: 0, ack: null, win: null, dups: 0, rto: false, sent: new Map() }, s2c: { end: 0, ack: null, win: null, dups: 0, rto: false, sent: new Map() } };
+  f.stats = { retrans: 0, fast: 0, timeout: 0, recovery: 0, dupAcks: 0, lost: 0 };
+  let phase = "handshake", prevT = f.packets[0]?.t ?? 0;
   for (const p of f.packets) {
-    const other = p.dir === "c2s" ? "s2c" : "c2s";
+    const other = p.dir === "c2s" ? "s2c" : "c2s", me = st[p.dir], them = st[other];
     p.rseq = (p.seq - isn[p.dir]) >>> 0;
     p.rack = p.flags & FLAG.ACK && isn[other] !== undefined ? (p.ack - isn[other]) >>> 0 : null;
+    p.rsack = isn[other] === undefined ? [] : p.sack.map(([l, r]) => [(l - isn[other]) >>> 0, (r - isn[other]) >>> 0]);
+    // SYN과 FIN은 데이터가 없어도 seq를 1 차지한다
+    const segLen = p.len + (p.flags & FLAG.SYN ? 1 : 0) + (p.flags & FLAG.FIN ? 1 : 0);
+
+    if (segLen > 0 && p.rseq + segLen <= me.end) {
+      // 이미 보낸 범위를 다시 보냈다 = 재전송. 종류는 직전 상황으로 가른다.
+      // - 연결이 한동안 조용했다(리눅스 최소 RTO 200ms) → 타임아웃 재전송
+      // - 타임아웃 뒤 ACK가 전진하기 전에 이어서 보낸 것 → 타임아웃 후 복구
+      // - 중복 ACK(SACK)를 받은 직후 → 빠른 재전송. SACK가 있으면 리눅스(RACK)는 3번을 기다리지 않는다.
+      if (p.t - prevT >= RTO_GAP) { p.retrans = "timeout"; me.rto = true; }
+      else if (me.rto) p.retrans = "recovery";
+      else if (them.dups > 0) p.retrans = "fast";
+      else p.retrans = "recovery";
+      f.stats.retrans++; f.stats[p.retrans]++;
+      // 같은 seq의 첫 전송은 도중에 사라졌을 가능성이 높다
+      const orig = me.sent.get(p.rseq);
+      if (orig && !orig.lost) { orig.lost = true; f.stats.lost++; }
+    } else if (segLen > 0) {
+      me.sent.set(p.rseq, p);
+    }
+    me.end = Math.max(me.end, p.rseq + segLen);
+
+    // 순수 ACK인데 직전과 ack·윈도우가 같고, 상대가 보낸 데이터가 아직 남아 있으면 중복 ACK다.
+    // 수신자가 "중간이 비었다"고 알리는 신호로, 3번 쌓이면 송신자가 빠른 재전송을 한다.
+    // 리눅스는 ACK마다 윈도우를 조금씩 바꾸므로, SACK 블록이 있으면 윈도우가 달라도 중복 ACK로 본다.
+    if (segLen === 0 && !(p.flags & FLAG.RST) && p.rack !== null && p.rack === me.ack && (p.win === me.win || p.sack.length) && them.end > p.rack) {
+      p.dup = ++me.dups;
+      f.stats.dupAcks++;
+    } else if (p.rack !== me.ack) {
+      me.dups = 0;
+      // ACK가 전진했다 = 상대의 타임아웃 복구가 한 걸음 끝났다
+      if (p.rack > (me.ack ?? 0)) them.rto = false;
+    }
+    if (p.rack !== null) { me.ack = p.rack; me.win = p.win; }
+    // 전송 중인 바이트(보냈지만 아직 ACK를 못 받은 양). 혼잡 윈도우의 하한 추정치다.
+    if (p.len > 0) p.flight = me.end - (them.ack ?? 0);
+
     p.label = label(p);
+    prevT = p.t;
     if (p.flags & (FLAG.FIN | FLAG.RST)) phase = "close";
     else if (phase === "handshake" && p.len > 0) phase = "data";
     p.phase = phase;
@@ -104,8 +164,10 @@ function label(p) {
   if (f & FLAG.FIN) names.push("FIN");
   if (f & FLAG.RST) names.push("RST");
   if (p.len > 0) names.push(`데이터 ${p.len}B`);
-  if (!names.length && f & FLAG.ACK) names.push("ACK");
+  if (!names.length && f & FLAG.ACK) names.push(p.dup ? `중복 ACK #${p.dup}` : "ACK");
+  if (p.rsack.length) names.push(`SACK ${p.rsack.map(([l, r]) => `${l}~${r}`).join(", ")}`);
+  if (p.retrans) names.push(RETRANS[p.retrans]);
   return names.join(" + ");
 }
 
-export { FLAG };
+export { FLAG, RETRANS };

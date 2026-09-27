@@ -129,3 +129,56 @@ func run(name string, args ...string) error {
 	}
 	return nil
 }
+
+const chaosChain = "MINIBOX-CHAOS"
+
+// Chaos는 mb0를 지나는 패킷을 loss 확률(0~1)로 버리고, rate가 있으면
+// 컨테이너로 들어가는 veth마다 tbf로 대역폭을 제한한다.
+// Orin Nano 커널에는 netem이 없어서 iptables statistic과 tbf를 조합한다.
+// ponytail: tbf는 지금 떠 있는 컨테이너에만 걸린다. 새 컨테이너는 chaos를 다시 실행해야 한다.
+func Chaos(loss float64, rate string) error {
+	if err := ClearChaos(); err != nil {
+		return err
+	}
+	if loss > 0 {
+		// 캡처(tcpdump -i mb0)는 FORWARD보다 먼저 일어나므로, 여기서 버린 패킷도 pcap에는 남는다
+		if err := run("iptables", "-A", chaosChain, "-i", Bridge, "-m", "statistic",
+			"--mode", "random", "--probability", fmt.Sprint(loss), "-j", "DROP"); err != nil {
+			return err
+		}
+	}
+	if rate != "" {
+		veths, _ := filepath.Glob("/sys/class/net/mbv*")
+		for _, v := range veths {
+			// 호스트 쪽 veth의 송신(egress)이 곧 컨테이너의 수신이다
+			if err := run("tc", "qdisc", "replace", "dev", filepath.Base(v), "root",
+				"tbf", "rate", rate, "burst", "32kbit", "latency", "400ms"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// ClearChaos는 손실 규칙과 대역폭 제한을 모두 걷어낸다.
+func ClearChaos() error {
+	if err := Setup(); err != nil {
+		return err
+	}
+	exec.Command("iptables", "-N", chaosChain).Run()
+	// MINIBOX 체인의 ACCEPT보다 먼저 봐야 버릴 수 있다
+	if exec.Command("iptables", "-C", chain, "-j", chaosChain).Run() != nil {
+		if err := run("iptables", "-I", chain, "1", "-j", chaosChain); err != nil {
+			return err
+		}
+	}
+	if err := run("iptables", "-F", chaosChain); err != nil {
+		return err
+	}
+	veths, _ := filepath.Glob("/sys/class/net/mbv*")
+	for _, v := range veths {
+		// 걸려 있지 않으면 에러가 나지만 상관없다
+		exec.Command("tc", "qdisc", "del", "dev", filepath.Base(v), "root").Run()
+	}
+	return nil
+}

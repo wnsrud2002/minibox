@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"minibox/internal/cgroup"
 	"minibox/internal/container"
 	"minibox/internal/dashboard"
+	"minibox/internal/network"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: minibox check | serve [--addr :7070] | run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
+		fmt.Println("usage: minibox check | serve [--addr :7070] | net chaos|clear | run [--mem 64m] [--cpu 0.5] [--pids 64] <image> <cmd> [args...]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -51,6 +53,11 @@ func main() {
 		fs.Parse(os.Args[2:])
 		if err := dashboard.Serve(*addr); err != nil {
 			fmt.Fprintln(os.Stderr, "serve:", err)
+			os.Exit(1)
+		}
+	case "net":
+		if err := netCmd(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "net:", err)
 			os.Exit(1)
 		}
 	case "init":
@@ -94,6 +101,33 @@ func check() bool {
 		report(err == nil, "명령어 "+cmd, "sudo apt install 필요")
 	}
 	return ok
+}
+
+// netCmd: minibox net chaos [--loss 10%] [--rate 1mbit] | minibox net clear
+func netCmd(args []string) error {
+	if len(args) > 0 && args[0] == "clear" {
+		if err := network.ClearChaos(); err != nil {
+			return err
+		}
+		fmt.Println("장애 주입 해제")
+		return nil
+	}
+	if len(args) == 0 || args[0] != "chaos" {
+		return fmt.Errorf("usage: minibox net chaos [--loss 10%%] [--rate 1mbit] | minibox net clear")
+	}
+	fs := flag.NewFlagSet("chaos", flag.ExitOnError)
+	lossStr := fs.String("loss", "0", "패킷 손실률 (예: 10%)")
+	rate := fs.String("rate", "", "컨테이너로 들어가는 대역폭 제한 (예: 1mbit)")
+	fs.Parse(args[1:])
+	loss, err := strconv.ParseFloat(strings.TrimSuffix(*lossStr, "%"), 64)
+	if err != nil || loss < 0 || loss > 100 {
+		return fmt.Errorf("잘못된 손실률: %q", *lossStr)
+	}
+	if err := network.Chaos(loss/100, *rate); err != nil {
+		return err
+	}
+	fmt.Printf("장애 주입: 손실 %g%%, 대역폭 %s\n", loss, map[bool]string{true: "제한 없음", false: *rate}[*rate == ""])
+	return nil
 }
 
 func hasField(s, want string) bool {

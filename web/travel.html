@@ -10,6 +10,7 @@
   --surface: #fcfcfb; --card: #ffffff; --grid: #e6e5e1; --band: #f3f2ef;
   --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
   --c2s: #2a78d6; --s2c: #eb6834; --hl: #fff4d6;
+  --critical: #d03b3b; --warning: #fab219;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -47,6 +48,14 @@ table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: 13p
 th, td { text-align: left; padding: 3px 12px 3px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 th { color: var(--text-2); font-weight: 500; }
 tr.cur { background: var(--hl); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
+.tile .label { color: var(--text-2); font-size: 12px; }
+.tile .value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .note { color: var(--muted); font-size: 12px; }
+.ico { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 11px; font-style: normal; vertical-align: -2px; margin-right: 4px; }
+#flightWrap { background: var(--card); border: 1px solid var(--grid); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; position: relative; }
+#flightWrap .title { font-size: 12px; color: var(--text-2); }
+.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--grid); border-radius: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
 .tablewrap { overflow-x: auto; }
 </style>
 </head>
@@ -61,18 +70,24 @@ tr.cur { background: var(--hl); }
   <div id="player" hidden>
     <div class="row">
       <label>연결 <select id="flow"></select></label>
+      <label><input type="checkbox" id="onlyEvents"> 문제 구간만 보기</label>
     </div>
+    <div class="tiles" id="tiles"></div>
+    <div id="flightWrap"><div class="title">전송 중인 바이트 (보냈지만 아직 ACK 못 받은 양, 혼잡 윈도우 추정) · 세로선 = 재전송</div><svg id="flight" width="100%" height="120"></svg><div class="tip" id="ftip"></div></div>
     <div class="row">
       <button id="play">▶ 재생</button>
       <button id="prev">◀ 한 칸</button>
       <button id="next">한 칸 ▶</button>
       <button id="all">전부 보기</button>
-      <label>속도 <select id="speed"><option value="2">느리게</option><option value="1" selected>보통</option><option value="0.4">빠르게</option></select></label>
+      <label>속도 <select id="speed"><option value="2">느리게</option><option value="1" selected>보통</option><option value="0.4">빠르게</option><option value="0.08">아주 빠르게</option></select></label>
       <span id="pos" style="color:var(--text-2)"></span>
     </div>
     <div class="legend">
       <span><span class="key" style="background:var(--c2s)"></span>클라이언트 → 서버</span>
       <span><span class="key" style="background:var(--s2c)"></span>서버 → 클라이언트</span>
+      <span><i class="ico" style="background:var(--critical)">⟲</i>재전송</span>
+      <span><i class="ico" style="background:var(--critical)">✕</i>도중에 사라짐(추정)</span>
+      <span><i class="ico" style="background:var(--warning)">!</i>중복 ACK</span>
     </div>
     <div id="diagram"></div>
     <div class="tablewrap"><table id="table"></table></div>
@@ -83,7 +98,7 @@ import { parsePcap, groupFlows } from "./pcap.js";
 
 const PHASE = { handshake: "연결 수립 (3-way)", data: "데이터 전송", close: "연결 종료" };
 const ROW = 36, TOP = 56, BAND = 120;
-let flows = [], flowSel, step = -1, timer = null;
+let flows = [], flowSel, rows = [], step = -1, timer = null;
 
 // 파일 선택, 끌어다 놓기, ?src=URL 세 가지로 pcap을 받는다
 file.onchange = () => file.files[0] && file.files[0].arrayBuffer().then(load);
@@ -107,18 +122,27 @@ function load(buf) {
   select(0);
 }
 flow.onchange = () => select(+flow.value);
+onlyEvents.onchange = () => select(+flow.value);
+
+const isEvent = p => p.retrans || p.lost || p.dup;
 
 function select(i) {
   stop();
   flowSel = flows[i];
+  // 문제 구간만: 재전송·손실·중복 ACK 앞뒤 3개씩만 남긴다
+  const ps = flowSel.packets;
+  rows = onlyEvents.checked ? ps.filter((_, k) => ps.slice(Math.max(0, k - 3), k + 4).some(isEvent)) : ps;
+  if (!rows.length) rows = ps;
+  summary();
+  drawFlight();
   render();
   go(-1);
 }
 
 // 두 호스트를 세로선으로 두고, 패킷마다 한 줄씩 비스듬한 화살표를 긋는다
 function render() {
-  const ps = flowSel.packets;
-  const W = Math.max(640, diagram.clientWidth), L = BAND + 60, R = W - 100;
+  const ps = rows;
+  const W = Math.max(640, diagram.clientWidth - 20), L = BAND + 60, R = W - 100;
   const H = TOP + ps.length * ROW + 24;
   let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
   // 단계 띠: 같은 phase가 이어지는 구간마다 왼쪽에 이름을 붙인다
@@ -134,22 +158,26 @@ function render() {
   s += `<line x1="${L}" x2="${L}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/><line x1="${R}" x2="${R}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/>`;
   s += `<defs>${["c2s", "s2c"].map(d => `<marker id="h-${d}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--${d})"/></marker>`).join("")}</defs>`;
   ps.forEach((p, i) => {
-    const y = TOP + i * ROW + 10, [x1, x2] = p.dir === "c2s" ? [L, R] : [R, L];
+    const y = TOP + i * ROW + 10, [x1, x2full] = p.dir === "c2s" ? [L, R] : [R, L];
+    // 사라진 패킷은 화살표를 절반에서 끊고 ✕를 찍는다
+    const x2 = p.lost ? x1 + (x2full - x1) * 0.3 : x2full, y2 = p.lost ? y + (ROW - 14) * 0.3 : y + ROW - 14;
+    const icon = p.retrans ? ico("critical", "⟲") : p.dup ? ico("warning", "!") : "";
     s += `<g id="p${i}" class="future">
-      <line class="arrow" x1="${x1}" y1="${y}" x2="${x2}" y2="${y + ROW - 14}" stroke="var(--${p.dir})" stroke-width="2" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" marker-end="url(#h-${p.dir})"/>
-      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--card)" stroke-width="4">${p.label}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
+      <line class="arrow" x1="${x1}" y1="${y}" x2="${x2}" y2="${y2}" stroke="var(--${p.dir})" stroke-width="2" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" ${p.lost ? "" : `marker-end="url(#h-${p.dir})"`}/>
+      ${p.lost ? `<g transform="translate(${x2},${y2})"><circle r="8" fill="var(--critical)" stroke="var(--card)" stroke-width="2"/><text y="4" text-anchor="middle" font-size="11" fill="#fff">✕</text></g>` : ""}
+      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--card)" stroke-width="4">${icon}${p.label}${p.lost ? " (사라짐)" : ""}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
       <text x="${W - 8}" y="${y + 8}" text-anchor="end" font-size="11" fill="var(--muted)">+${(p.t * 1000).toFixed(3)}ms</text>
     </g>`;
   });
   diagram.innerHTML = s + "</svg>";
 
   table.innerHTML = `<tr><th>#</th><th>시간(ms)</th><th>방향</th><th>내용</th><th>seq</th><th>ack</th><th>윈도우</th><th>길이</th></tr>` +
-    ps.map((p, i) => `<tr id="r${i}"><td>${p.no}</td><td>${(p.t * 1000).toFixed(3)}</td><td>${p.dir === "c2s" ? "클라이언트 → 서버" : "서버 → 클라이언트"}</td><td>${p.label}</td><td>${p.rseq}</td><td>${p.rack ?? ""}</td><td>${p.win}</td><td>${p.len}</td></tr>`).join("");
+    ps.map((p, i) => `<tr id="r${i}"><td>${p.no}</td><td>${(p.t * 1000).toFixed(3)}</td><td>${p.dir === "c2s" ? "클라이언트 → 서버" : "서버 → 클라이언트"}</td><td>${p.label}${p.lost ? " (사라짐)" : ""}</td><td>${p.rseq}</td><td>${p.rack ?? ""}</td><td>${p.win}</td><td>${p.len}</td></tr>`).join("");
 }
 
 // go(i): 0..i번 패킷까지 보이게 한다. i번은 화살표가 날아가는 애니메이션으로 그린다.
 function go(i, animate = true) {
-  const ps = flowSel.packets;
+  const ps = rows;
   step = Math.max(-1, Math.min(ps.length - 1, i));
   const dur = 500 * +speed.value;
   ps.forEach((_, k) => {
@@ -167,15 +195,77 @@ function go(i, animate = true) {
 function stop() { clearInterval(timer); timer = null; play.textContent = "▶ 재생"; }
 play.onclick = () => {
   if (timer) return stop();
-  if (step >= flowSel.packets.length - 1) go(-1);
+  if (step >= rows.length - 1) go(-1);
   play.textContent = "⏸ 멈춤";
-  const tick = () => { go(step + 1); if (step >= flowSel.packets.length - 1) stop(); };
+  const tick = () => { go(step + 1); if (step >= rows.length - 1) stop(); };
   tick();
   timer = setInterval(tick, 700 * +speed.value);
 };
 prev.onclick = () => { stop(); go(step - 1, false); };
 next.onclick = () => { stop(); go(step + 1); };
-all.onclick = () => { stop(); go(flowSel.packets.length - 1, false); };
+all.onclick = () => { stop(); go(rows.length - 1, false); };
+
+// SVG 텍스트 안에 넣는 상태 아이콘(색 + 기호, 색만으로 뜻을 전하지 않게)
+function ico(level, ch) {
+  return `<tspan fill="var(--${level})" font-weight="700">${ch} </tspan>`;
+}
+
+function summary() {
+  const ps = flowSel.packets, st = flowSel.stats;
+  const dur = ps.at(-1).t - ps[0].t;
+  // 처리량은 재전송을 뺀 실제 데이터(goodput)로 계산한다
+  const bytes = ps.filter(p => p.len > 0 && !p.retrans).reduce((n, p) => n + p.len, 0);
+  const rate = dur > 0 ? bytes * 8 / dur : 0;
+  const fmtRate = r => r >= 1e9 ? `${(r / 1e9).toFixed(2)} Gbps` : r >= 1e6 ? `${(r / 1e6).toFixed(2)} Mbps` : `${(r / 1e3).toFixed(1)} kbps`;
+  const tile = (label, value, note = "") => `<div class="tile"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
+  tiles.innerHTML =
+    tile("패킷", ps.length.toLocaleString(), `${(dur * 1000).toFixed(1)}ms 동안`) +
+    tile("처리량", fmtRate(rate), `데이터 ${(bytes / 1024).toFixed(1)} KiB, 재전송 제외`) +
+    tile(`<i class="ico" style="background:var(--critical)">⟲</i>재전송`, st.retrans, `빠른 ${st.fast} · 타임아웃 ${st.timeout} · 복구 ${st.recovery}`) +
+    tile(`<i class="ico" style="background:var(--critical)">✕</i>사라진 패킷`, st.lost, "재전송된 원본(추정)") +
+    tile(`<i class="ico" style="background:var(--warning)">!</i>중복 ACK`, st.dupAcks, "SACK로 빈 구간을 알림");
+}
+
+// 데이터를 가장 많이 보낸 쪽의 전송 중인 바이트를 시간축으로 그린다
+function drawFlight() {
+  const ps = flowSel.packets;
+  const by = { c2s: 0, s2c: 0 };
+  for (const p of ps) by[p.dir] += p.len;
+  const dir = by.c2s >= by.s2c ? "c2s" : "s2c";
+  const pts = ps.filter(p => p.dir === dir && p.flight !== undefined);
+  const W = flight.clientWidth || 600, H = 120, pad = { l: 56, r: 8, t: 8, b: 20 };
+  const t0 = ps[0].t, t1 = Math.max(ps.at(-1).t, t0 + 1e-6);
+  const maxV = Math.max(1, ...pts.map(p => p.flight)) * 1.1;
+  const x = t => pad.l + (W - pad.l - pad.r) * (t - t0) / (t1 - t0);
+  const y = v => pad.t + (H - pad.t - pad.b) * (1 - v / maxV);
+  const kb = v => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : `${v.toFixed(0)}`;
+  let s = "";
+  for (const v of [0, maxV / 2, maxV / 1.1]) {
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>`;
+    s += `<text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${kb(v)}B</text>`;
+  }
+  s += `<text x="${pad.l}" y="${H - 4}" font-size="11" fill="var(--muted)">0ms</text><text x="${W - pad.r}" y="${H - 4}" text-anchor="end" font-size="11" fill="var(--muted)">${((t1 - t0) * 1000).toFixed(1)}ms</text>`;
+  for (const p of ps.filter(p => p.retrans)) s += `<line x1="${x(p.t)}" x2="${x(p.t)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--critical)" stroke-width="1" opacity="0.6"/>`;
+  if (pts.length) s += `<polyline points="${pts.map(p => `${x(p.t)},${y(p.flight)}`).join(" ")}" fill="none" stroke="var(--${dir})" stroke-width="2" stroke-linejoin="round"/>`;
+  s += `<g id="fcross" style="display:none"><line y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)"/><circle r="4" fill="var(--${dir})" stroke="var(--card)" stroke-width="2"/></g>`;
+  flight.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  flight.innerHTML = s;
+  // 십자선 + 툴팁
+  flight.onpointermove = e => {
+    if (!pts.length) return;
+    const px = e.clientX - flight.getBoundingClientRect().left;
+    const p = pts.reduce((a, b) => Math.abs(x(b.t) - px) < Math.abs(x(a.t) - px) ? b : a);
+    const g = document.getElementById("fcross");
+    g.style.display = "";
+    g.querySelector("line").setAttribute("x1", x(p.t)); g.querySelector("line").setAttribute("x2", x(p.t));
+    g.querySelector("circle").setAttribute("cx", x(p.t)); g.querySelector("circle").setAttribute("cy", y(p.flight));
+    ftip.style.display = "block";
+    ftip.textContent = `#${p.no} · ${(p.t * 1000).toFixed(2)}ms · ${p.flight.toLocaleString()}B${p.retrans ? " · 재전송" : ""}`;
+    ftip.style.left = Math.min(x(p.t) + 16, W - ftip.offsetWidth) + "px";
+    ftip.style.top = "8px";
+  };
+  flight.onpointerleave = () => { document.getElementById("fcross").style.display = "none"; ftip.style.display = "none"; };
+}
 </script>
 </body>
 </html>
