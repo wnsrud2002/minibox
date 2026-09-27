@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: minibox check | run <cmd> [args...]")
+		fmt.Println("usage: minibox check | run <image> <cmd> [args...]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -20,18 +20,18 @@ func main() {
 			os.Exit(1)
 		}
 	case "run":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "usage: minibox run <cmd> [args...]")
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "usage: minibox run <image> <cmd> [args...]")
 			os.Exit(2)
 		}
-		code, err := container.Run(os.Args[2:])
+		code, err := container.Run(os.Args[2], os.Args[3:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "run:", err)
 		}
 		os.Exit(code)
 	case "init":
 		// run이 내부적으로 부르는 서브커맨드. 새 네임스페이스 안에서 실행된다.
-		if err := container.Init(os.Args[2:]); err != nil {
+		if err := container.Init(os.Args[2], os.Args[3], os.Args[4:]); err != nil {
 			fmt.Fprintln(os.Stderr, "init:", err)
 			os.Exit(1)
 		}
