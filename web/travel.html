@@ -64,7 +64,9 @@ tr.cur { background: var(--hl); }
   <h1>패킷 여행기</h1>
   <p class="sub">tcpdump로 캡처한 pcap을 브라우저에서 직접 파싱해, TCP 연결 하나를 시퀀스 다이어그램으로 재생합니다.</p>
 
-  <div id="drop">pcap 파일을 여기에 끌어다 놓거나 <input type="file" id="file" accept=".pcap,.cap"></div>
+  <div id="drop">pcap 파일을 여기에 끌어다 놓거나 <input type="file" id="file" accept=".pcap,.cap">
+    <div style="margin-top:8px">샘플: <a href="?src=samples/http.pcap">컨테이너 A→B HTTP 요청 한 번</a> · <a href="?src=samples/loss10.pcap">패킷 10% 손실 중 300KB 전송</a></div>
+  </div>
   <p id="err"></p>
 
   <div id="player" hidden>

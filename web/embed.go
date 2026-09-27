@@ -4,5 +4,5 @@ package web
 
 import "embed"
 
-//go:embed travel.html pcap.js
+//go:embed travel.html pcap.js samples
 var FS embed.FS
