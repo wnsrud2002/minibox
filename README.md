@@ -12,6 +12,8 @@ Go로 만든 미니 컨테이너 런타임과, 그 위를 오가는 TCP 패킷�
 
 ## 무엇을 보여 주나
 
+![터미널 데모: 컨테이너 안에서는 PID 1과 다른 호스트네임, fork bomb은 pids.max=20에서 막히고, 64MiB를 넘으면 OOM kill, 컨테이너 B가 A의 웹서버에서 hello를 받는다](docs/terminal.gif)
+
 | | 결과 |
 |---|---|
 | 격리 | 컨테이너 안에서 `echo $$` = 1, 자기 프로세스만 보이는 `ps`, 원본 이미지를 건드리지 않는 overlayfs |
@@ -51,6 +53,7 @@ Go로 만든 미니 컨테이너 런타임과, 그 위를 오가는 TCP 패킷�
 ./scripts/fetch-alpine.sh            # alpine minirootfs를 images/alpine에 받기
 go build -o minibox ./cmd/minibox
 sudo ./minibox check                 # 호스트 조건 점검
+sudo ./scripts/demo.sh               # 위 터미널 데모를 30초 동안 차례로 실행
 ```
 
 | 명령 | 하는 일 |
