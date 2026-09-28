@@ -4,59 +4,83 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>패킷 여행기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   color-scheme: light;
-  --surface: #fcfcfb; --card: #ffffff; --grid: #e6e5e1; --band: #f3f2ef;
-  --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
-  --c2s: #2a78d6; --s2c: #eb6834; --hl: #fff4d6;
-  --critical: #d03b3b; --warning: #fab219;
+  --paper: #eef2f5; --sheet: #f8fafb; --grid: #c9d3dc; --band: #e3e9ee;
+  --text: #1b2430; --text-2: #4f5d6b; --muted: #7d8996;
+  --c2s: #1f4e9c; --s2c: #c8323c; --hl: #f6e7b8;
+  --critical: #5b3a8c; --warning: #b98710;
+  --display: "Hahmlet", "Nanum Myeongjo", serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --surface: #1a1a19; --card: #232322; --grid: #383835; --band: #2a2a28;
-    --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
-    --c2s: #3987e5; --s2c: #d95926; --hl: #3d3522;
+    --paper: #141a22; --sheet: #1b232d; --grid: #334150; --band: #212b36;
+    --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
+    --c2s: #6c9be8; --s2c: #f06a6f; --hl: #4a3f1f;
+    --critical: #b79be6; --warning: #e8b84a;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface: #1a1a19; --card: #232322; --grid: #383835; --band: #2a2a28;
-  --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
-  --c2s: #3987e5; --s2c: #d95926; --hl: #3d3522;
+  --paper: #141a22; --sheet: #1b232d; --grid: #334150; --band: #212b36;
+  --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
+  --c2s: #6c9be8; --s2c: #f06a6f; --hl: #4a3f1f;
+  --critical: #b79be6; --warning: #e8b84a;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--surface); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
-main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 64px; }
-h1 { font-size: 20px; margin: 0 0 4px; }
-.sub { color: var(--text-2); margin: 0 0 16px; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
-select, button, input[type=file] { font: inherit; color: inherit; }
-select, button { background: var(--card); border: 1px solid var(--grid); border-radius: 6px; padding: 4px 10px; }
+body { margin: 0; word-break: keep-all; overflow-wrap: break-word; background: var(--paper); color: var(--text); font: 15px/1.6 "IBM Plex Sans KR", system-ui, sans-serif; }
+main { max-width: 1000px; margin: 0 auto; padding: 48px 16px 80px; }
+a { color: var(--c2s); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--c2s); outline-offset: 2px; }
+h1 { font: 700 clamp(40px, 8vw, 72px)/1 var(--display); letter-spacing: -0.03em; margin: 0 0 16px; }
+.sub { color: var(--text-2); margin: 0 0 32px; max-width: 36em; }
+
+/* 항공우편 봉투: 파랑·빨강 줄무늬가 그대로 두 방향의 색이다 */
+#drop { border: 10px solid transparent; border-image: repeating-linear-gradient(-45deg, var(--c2s) 0 14px, var(--sheet) 14px 22px, var(--s2c) 22px 36px, var(--sheet) 36px 44px) 10; background: var(--sheet); padding: 28px 28px 24px; }
+#drop.over { background: var(--hl); }
+#drop .lead { font: 600 20px/1.3 var(--display); margin: 0 0 12px; }
+#drop .samples { margin: 20px 0 0; padding: 16px 0 0; border-top: 1px dashed var(--grid); color: var(--text-2); }
+#drop .samples ul { margin: 4px 0 0; padding-left: 18px; }
+input[type=file] { font: inherit; color: var(--text-2); }
+input[type=file]::file-selector-button { font: inherit; color: var(--paper); background: var(--text); border: 0; border-radius: 3px; padding: 6px 14px; margin-right: 12px; cursor: pointer; }
+#err { color: var(--critical); font-weight: 500; }
+
+.row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+select, button { font: inherit; color: inherit; background: var(--sheet); border: 1px solid var(--grid); border-radius: 3px; padding: 5px 12px; }
 button { cursor: pointer; }
-#drop { border: 1px dashed var(--muted); border-radius: 10px; padding: 16px; color: var(--text-2); }
-#drop.over { background: var(--band); }
-#err { color: #d03b3b; }
-.legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; }
-.key { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; }
-#diagram { background: var(--card); border: 1px solid var(--grid); border-radius: 10px; overflow-x: auto; }
-#diagram svg { display: block; }
-.arrow { transition: stroke-dashoffset var(--dur, 500ms) linear; }
-.future { opacity: 0; }
-table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 3px 12px 3px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-th { color: var(--text-2); font-weight: 500; }
-tr.cur { background: var(--hl); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
-.tile .label { color: var(--text-2); font-size: 12px; }
-.tile .value { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+button:hover, select:hover { border-color: var(--text-2); }
+#play { background: var(--text); color: var(--paper); border-color: var(--text); min-width: 88px; }
+#pos { color: var(--text-2); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+.tiles { display: flex; flex-wrap: wrap; gap: 20px 40px; margin: 28px 0; }
+.tile .label { color: var(--text-2); font-size: 13px; }
+.tile .value { font: 600 30px/1.2 var(--display); font-variant-numeric: tabular-nums; }
 .tile .note { color: var(--muted); font-size: 12px; }
 .ico { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 11px; font-style: normal; vertical-align: -2px; margin-right: 4px; }
-#flightWrap { background: var(--card); border: 1px solid var(--grid); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; position: relative; }
-#flightWrap .title { font-size: 12px; color: var(--text-2); }
-.tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--grid); border-radius: 6px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
-.tablewrap { overflow-x: auto; }
+
+#flightWrap { position: relative; margin-bottom: 8px; }
+#flightWrap .title { font-size: 13px; color: var(--text-2); }
+#flightWrap .title b { color: var(--text); font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--paper); border-radius: 3px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
+.key { display: inline-block; width: 20px; height: 3px; vertical-align: middle; margin-right: 6px; }
+#diagram { background: var(--sheet); border-top: 2px solid var(--text); overflow-x: auto; }
+#diagram svg { display: block; font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
+.arrow { transition: stroke-dashoffset var(--dur, 500ms) linear; }
+.future { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .arrow { transition: none; } }
+
+.tablewrap { overflow-x: auto; margin-top: 32px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; border-bottom: 2px solid var(--text); }
+tr.cur { background: var(--hl); }
 </style>
 </head>
 <body>
@@ -66,8 +90,15 @@ tr.cur { background: var(--hl); }
     처음이라면 <a href="https://github.com/wnsrud2002/minibox/blob/master/docs/LEARN.md#9-패킷-여행기-화면-읽는-법">화면 읽는 법</a>과
     <a href="https://github.com/wnsrud2002/minibox/blob/master/docs/LEARN.md#5-tcp-기초-seq-ack-핸드셰이크">TCP 배경지식</a>부터 보세요.</p>
 
-  <div id="drop">pcap 파일을 여기에 끌어다 놓거나 <input type="file" id="file" accept=".pcap,.cap">
-    <div style="margin-top:8px">샘플: <a href="?src=samples/http.pcap">컨테이너 A→B HTTP 요청 한 번</a> · <a href="?src=samples/loss10.pcap">패킷 10% 손실 중 300KB 전송</a></div>
+  <div id="drop">
+    <p class="lead">pcap 파일을 여기에 끌어다 놓으세요</p>
+    <input type="file" id="file" accept=".pcap,.cap" aria-label="pcap 파일 고르기">
+    <div class="samples">파일이 없다면 샘플로 시작하세요.
+      <ul>
+        <li><a href="?src=samples/http.pcap">컨테이너 A가 B에 HTTP 요청을 한 번 보낸 기록</a></li>
+        <li><a href="?src=samples/loss10.pcap">패킷 10%가 사라지는 중에 300KB를 보낸 기록</a></li>
+      </ul>
+    </div>
   </div>
   <p id="err"></p>
 
@@ -77,7 +108,7 @@ tr.cur { background: var(--hl); }
       <label><input type="checkbox" id="onlyEvents"> 문제 구간만 보기</label>
     </div>
     <div class="tiles" id="tiles"></div>
-    <div id="flightWrap"><div class="title">전송 중인 바이트 (보냈지만 아직 ACK 못 받은 양, 혼잡 윈도우 추정) · 세로선 = 재전송</div><svg id="flight" width="100%" height="120"></svg><div class="tip" id="ftip"></div></div>
+    <div id="flightWrap"><div class="title"><b>전송 중인 바이트</b>: 보냈지만 아직 ACK를 못 받은 양으로, 혼잡 윈도우를 추정한 값입니다. 세로선은 재전송입니다.</div><svg id="flight" width="100%" height="120"></svg><div class="tip" id="ftip"></div></div>
     <div class="row">
       <button id="play">▶ 재생</button>
       <button id="prev">◀ 한 칸</button>
@@ -168,8 +199,8 @@ function render() {
     const icon = p.retrans ? ico("critical", "⟲") : p.dup ? ico("warning", "!") : "";
     s += `<g id="p${i}" class="future">
       <line class="arrow" x1="${x1}" y1="${y}" x2="${x2}" y2="${y2}" stroke="var(--${p.dir})" stroke-width="2" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" ${p.lost ? "" : `marker-end="url(#h-${p.dir})"`}/>
-      ${p.lost ? `<g transform="translate(${x2},${y2})"><circle r="8" fill="var(--critical)" stroke="var(--card)" stroke-width="2"/><text y="4" text-anchor="middle" font-size="11" fill="#fff">✕</text></g>` : ""}
-      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--card)" stroke-width="4">${icon}${p.label}${p.lost ? " (사라짐)" : ""}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
+      ${p.lost ? `<g transform="translate(${x2},${y2})"><circle r="8" fill="var(--critical)" stroke="var(--sheet)" stroke-width="2"/><text y="4" text-anchor="middle" font-size="11" fill="#fff">✕</text></g>` : ""}
+      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--sheet)" stroke-width="4">${icon}${p.label}${p.lost ? " (사라짐)" : ""}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
       <text x="${W - 8}" y="${y + 8}" text-anchor="end" font-size="11" fill="var(--muted)">+${(p.t * 1000).toFixed(3)}ms</text>
     </g>`;
   });
@@ -251,7 +282,7 @@ function drawFlight() {
   s += `<text x="${pad.l}" y="${H - 4}" font-size="11" fill="var(--muted)">0ms</text><text x="${W - pad.r}" y="${H - 4}" text-anchor="end" font-size="11" fill="var(--muted)">${((t1 - t0) * 1000).toFixed(1)}ms</text>`;
   for (const p of ps.filter(p => p.retrans)) s += `<line x1="${x(p.t)}" x2="${x(p.t)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--critical)" stroke-width="1" opacity="0.6"/>`;
   if (pts.length) s += `<polyline points="${pts.map(p => `${x(p.t)},${y(p.flight)}`).join(" ")}" fill="none" stroke="var(--${dir})" stroke-width="2" stroke-linejoin="round"/>`;
-  s += `<g id="fcross" style="display:none"><line y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)"/><circle r="4" fill="var(--${dir})" stroke="var(--card)" stroke-width="2"/></g>`;
+  s += `<g id="fcross" style="display:none"><line y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)"/><circle r="4" fill="var(--${dir})" stroke="var(--sheet)" stroke-width="2"/></g>`;
   flight.setAttribute("viewBox", `0 0 ${W} ${H}`);
   flight.innerHTML = s;
   // 십자선 + 툴팁
