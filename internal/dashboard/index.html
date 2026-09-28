@@ -4,62 +4,60 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>minibox 대시보드</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
 :root {
   color-scheme: light;
-  --paper: #eef2f5; --sheet: #f8fafb; --grid: #c9d3dc;
-  --text: #1b2430; --text-2: #4f5d6b; --muted: #7d8996;
-  --series-1: #1f4e9c; --series-2: #c8323c;
-  --good: #2f7d4f; --warning: #b98710; --critical: #5b3a8c;
-  --display: "Hahmlet", "Nanum Myeongjo", serif;
+  --paper: #ffffff; --sheet: #f5f6f8; --grid: #e5e7eb;
+  --text: #1f2328; --text-2: #5c636e; --muted: #8b929c;
+  --series-1: #2563eb; --series-2: #e8590c;
+  --good: #16a34a; --warning: #ca8a04; --critical: #dc2626;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #141a22; --sheet: #1b232d; --grid: #334150;
-    --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
-    --series-1: #6c9be8; --series-2: #f06a6f;
-    --good: #5fbf85; --warning: #e8b84a; --critical: #b79be6;
+    --paper: #17191c; --sheet: #1d2024; --grid: #30343a;
+    --text: #e8eaed; --text-2: #a4abb5; --muted: #767e89;
+    --series-1: #5b8def; --series-2: #f08a4b;
+    --good: #4ade80; --warning: #e3b341; --critical: #f05252;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #141a22; --sheet: #1b232d; --grid: #334150;
-  --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
-  --series-1: #6c9be8; --series-2: #f06a6f;
-  --good: #5fbf85; --warning: #e8b84a; --critical: #b79be6;
+  --paper: #17191c; --sheet: #1d2024; --grid: #30343a;
+  --text: #e8eaed; --text-2: #a4abb5; --muted: #767e89;
+  --series-1: #5b8def; --series-2: #f08a4b;
+  --good: #4ade80; --warning: #e3b341; --critical: #f05252;
 }
 * { box-sizing: border-box; }
-body { margin: 0; word-break: keep-all; overflow-wrap: break-word; background: var(--paper); color: var(--text); font: 15px/1.6 "IBM Plex Sans KR", system-ui, sans-serif; }
-main { max-width: 1100px; margin: 0 auto; padding: 40px 16px 80px; }
-a { color: var(--series-1); text-underline-offset: 3px; }
+body { margin: 0; word-break: keep-all; overflow-wrap: break-word; background: var(--paper); color: var(--text); font: 14px/1.6 "Pretendard Variable", Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 80px; }
+a { color: var(--series-1); text-decoration: none; }
+a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
 header { display: flex; align-items: baseline; gap: 8px 20px; flex-wrap: wrap; margin-bottom: 8px; }
-h1 { font: 700 clamp(36px, 6vw, 56px)/1 var(--display); letter-spacing: -0.03em; margin: 0; }
+h1 { font-size: 18px; font-weight: 700; margin: 0; }
 #conn { color: var(--text-2); font-size: 13px; }
 header a { margin-left: auto; }
-.empty { color: var(--text-2); padding: 40px 0; border-top: 2px solid var(--text); }
+.empty { color: var(--text-2); padding: 40px 0; border-top: 1px solid var(--grid); }
 code { background: var(--sheet); padding: 1px 5px; border-radius: 3px; }
-.card { border-top: 2px solid var(--text); padding: 20px 0 32px; margin-top: 24px; }
-.card h2 { font: 600 24px/1.2 var(--display); margin: 0; overflow-wrap: anywhere; }
+.card { border: 1px solid var(--grid); border-radius: 8px; padding: 20px; margin-top: 16px; }
+.card h2 { font-size: 16px; font-weight: 700; margin: 0; overflow-wrap: anywhere; }
 .meta { color: var(--text-2); font-size: 13px; overflow-wrap: anywhere; }
 .tiles { display: flex; flex-wrap: wrap; gap: 20px 48px; margin: 20px 0; }
 .tile .label { color: var(--text-2); font-size: 13px; }
-.tile .value { font: 600 30px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.tile .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tile .limit { color: var(--muted); font-size: 12px; }
 .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; margin-right: 12px; }
 .badge i { font-style: normal; width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 11px; display: inline-grid; place-items: center; }
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 32px; }
-.chart { position: relative; background: var(--sheet); padding: 8px 12px; }
+.chart { position: relative; }
 .chart .title { font-size: 13px; color: var(--text-2); }
-.chart svg { width: 100%; height: 110px; display: block; overflow: visible; font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
-.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--paper); border-radius: 3px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; font-variant-numeric: tabular-nums; }
+.chart svg { width: 100%; height: 110px; display: block; overflow: visible; font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; }
+.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--paper); border-radius: 4px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; font-variant-numeric: tabular-nums; }
 table { border-collapse: collapse; margin-top: 20px; font-size: 13px; }
 th, td { text-align: left; padding: 4px 24px 4px 0; border-bottom: 1px solid var(--grid); }
-th { color: var(--text-2); font-weight: 500; border-bottom: 2px solid var(--text); }
+th { color: var(--text-2); font-weight: 500; }
 </style>
 </head>
 <body>

@@ -4,118 +4,115 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>패킷 여행기</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
 :root {
   color-scheme: light;
-  --paper: #eef2f5; --sheet: #f8fafb; --grid: #c9d3dc; --band: #e3e9ee;
-  --text: #1b2430; --text-2: #4f5d6b; --muted: #7d8996;
-  --c2s: #1f4e9c; --s2c: #c8323c; --hl: #f6e7b8;
-  --critical: #5b3a8c; --warning: #b98710;
-  --display: "Hahmlet", "Nanum Myeongjo", serif;
+  --paper: #ffffff; --sheet: #ffffff; --grid: #e5e7eb; --band: #f5f6f8;
+  --text: #1f2328; --text-2: #5c636e; --muted: #8b929c;
+  --c2s: #2563eb; --s2c: #e8590c; --hl: #fff7d6;
+  --critical: #dc2626; --warning: #ca8a04;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #141a22; --sheet: #1b232d; --grid: #334150; --band: #212b36;
-    --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
-    --c2s: #6c9be8; --s2c: #f06a6f; --hl: #4a3f1f;
-    --critical: #b79be6; --warning: #e8b84a;
+    --paper: #17191c; --sheet: #1d2024; --grid: #30343a; --band: #23262b;
+    --text: #e8eaed; --text-2: #a4abb5; --muted: #767e89;
+    --c2s: #5b8def; --s2c: #f08a4b; --hl: #3a3420;
+    --critical: #f05252; --warning: #e3b341;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #141a22; --sheet: #1b232d; --grid: #334150; --band: #212b36;
-  --text: #e4e9ef; --text-2: #a9b5c2; --muted: #7d8a98;
-  --c2s: #6c9be8; --s2c: #f06a6f; --hl: #4a3f1f;
-  --critical: #b79be6; --warning: #e8b84a;
+  --paper: #17191c; --sheet: #1d2024; --grid: #30343a; --band: #23262b;
+  --text: #e8eaed; --text-2: #a4abb5; --muted: #767e89;
+  --c2s: #5b8def; --s2c: #f08a4b; --hl: #3a3420;
+  --critical: #f05252; --warning: #e3b341;
 }
 * { box-sizing: border-box; }
-body { margin: 0; word-break: keep-all; overflow-wrap: break-word; background: var(--paper); color: var(--text); font: 15px/1.6 "IBM Plex Sans KR", system-ui, sans-serif; }
-main { max-width: 1000px; margin: 0 auto; padding: 48px 16px 80px; }
-a { color: var(--c2s); text-underline-offset: 3px; }
+body { margin: 0; word-break: keep-all; overflow-wrap: break-word; background: var(--paper); color: var(--text);
+  font: 14px/1.6 "Pretendard Variable", Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
+main.over { outline: 2px dashed var(--c2s); outline-offset: -8px; }
+a { color: var(--c2s); text-decoration: none; }
+a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--c2s); outline-offset: 2px; }
-h1 { font: 700 clamp(40px, 8vw, 72px)/1 var(--display); letter-spacing: -0.03em; margin: 0 0 16px; }
-.sub { color: var(--text-2); margin: 0 0 32px; max-width: 36em; }
 
-/* 항공우편 봉투: 파랑·빨강 줄무늬가 그대로 두 방향의 색이다 */
-#drop { border: 10px solid transparent; border-image: repeating-linear-gradient(-45deg, var(--c2s) 0 14px, var(--sheet) 14px 22px, var(--s2c) 22px 36px, var(--sheet) 36px 44px) 10; background: var(--sheet); padding: 28px 28px 24px; }
-#drop.over { background: var(--hl); }
-#drop .lead { font: 600 20px/1.3 var(--display); margin: 0 0 12px; }
-#drop .samples { margin: 20px 0 0; padding: 16px 0 0; border-top: 1px dashed var(--grid); color: var(--text-2); }
-#drop .samples ul { margin: 4px 0 0; padding-left: 18px; }
-input[type=file] { font: inherit; color: var(--text-2); }
-input[type=file]::file-selector-button { font: inherit; color: var(--paper); background: var(--text); border: 0; border-radius: 3px; padding: 6px 14px; margin-right: 12px; cursor: pointer; }
-#err { color: var(--critical); font-weight: 500; }
+.top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 20px 0 12px; }
+h1 { font-size: 18px; font-weight: 700; margin: 0 auto 0 0; letter-spacing: -0.01em; }
+.intro { color: var(--text-2); margin: 0 0 20px; max-width: 46em; }
+select, button, .btn { font: inherit; color: inherit; background: var(--sheet); border: 1px solid var(--grid); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+select:hover, button:hover, .btn:hover { background: var(--band); }
+.btn.primary, #play { background: var(--text); color: var(--paper); border-color: var(--text); }
+.btn.primary:hover, #play:hover { opacity: 0.88; background: var(--text); }
+#file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+#file:focus-visible + .btn { outline: 2px solid var(--c2s); outline-offset: 2px; }
+#err { color: var(--critical); margin: 0; }
+#err:empty { display: none; }
 
-.row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
-select, button { font: inherit; color: inherit; background: var(--sheet); border: 1px solid var(--grid); border-radius: 3px; padding: 5px 12px; }
-button { cursor: pointer; }
-button:hover, select:hover { border-color: var(--text-2); }
-#play { background: var(--text); color: var(--paper); border-color: var(--text); min-width: 88px; }
-#pos { color: var(--text-2); font-variant-numeric: tabular-nums; margin-left: auto; }
-
-.tiles { display: flex; flex-wrap: wrap; gap: 20px 40px; margin: 28px 0; }
+.row { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
+.flowrow { color: var(--text-2); margin-bottom: 16px; }
+.tiles { display: flex; flex-wrap: wrap; gap: 16px 40px; padding: 16px 0; border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid); margin-bottom: 20px; }
 .tile .label { color: var(--text-2); font-size: 13px; }
-.tile .value { font: 600 30px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.tile .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .tile .note { color: var(--muted); font-size: 12px; }
 .ico { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 11px; font-style: normal; vertical-align: -2px; margin-right: 4px; }
 
-#flightWrap { position: relative; margin-bottom: 8px; }
-#flightWrap .title { font-size: 13px; color: var(--text-2); }
+#flightWrap { position: relative; margin-bottom: 20px; }
+#flightWrap .title { font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
 #flightWrap .title b { color: var(--text); font-weight: 600; }
-.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--paper); border-radius: 3px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
+.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--paper); border-radius: 4px; padding: 2px 8px; font-size: 12px; white-space: nowrap; display: none; }
 
-.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
-.key { display: inline-block; width: 20px; height: 3px; vertical-align: middle; margin-right: 6px; }
-#diagram { background: var(--sheet); border-top: 2px solid var(--text); overflow-x: auto; }
-#diagram svg { display: block; font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
+/* 다이어그램이 길어도 재생 버튼이 계속 보이게 위에 붙인다 */
+.controls { position: sticky; top: 0; z-index: 1; background: var(--paper); padding: 10px 0; }
+#pos { color: var(--text-2); font-variant-numeric: tabular-nums; margin-left: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--text-2); font-size: 13px; padding-bottom: 10px; }
+.key { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; }
+#diagram { background: var(--sheet); border: 1px solid var(--grid); border-radius: 8px; overflow-x: auto; }
+#diagram svg { display: block; font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; }
 .arrow { transition: stroke-dashoffset var(--dur, 500ms) linear; }
 .future { opacity: 0; }
+#diagram g { scroll-margin: 120px 0 24px; }
 @media (prefers-reduced-motion: reduce) { .arrow { transition: none; } }
 
-.tablewrap { overflow-x: auto; margin-top: 32px; }
+.tablewrap { overflow-x: auto; margin-top: 24px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-th { color: var(--text-2); font-weight: 500; border-bottom: 2px solid var(--text); }
+th, td { text-align: left; padding: 5px 16px 5px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-2); font-weight: 500; }
 tr.cur { background: var(--hl); }
 </style>
 </head>
 <body>
-<main>
-  <h1>패킷 여행기</h1>
-  <p class="sub">tcpdump로 캡처한 pcap을 브라우저에서 직접 파싱해, TCP 연결 하나를 시퀀스 다이어그램으로 재생합니다.
+<main id="drop">
+  <header class="top">
+    <h1>패킷 여행기</h1>
+    <select id="sample" aria-label="샘플 캡처">
+      <option value="samples/loss10.pcap">샘플: 10% 손실 중 300KB 전송</option>
+      <option value="samples/http.pcap">샘플: 컨테이너 간 HTTP 요청</option>
+      <option value="">내 파일</option>
+    </select>
+    <input type="file" id="file" accept=".pcap,.cap"><label for="file" class="btn primary">pcap 열기</label>
+  </header>
+  <p class="intro">tcpdump 캡처를 브라우저에서 바로 읽어 TCP 연결 하나를 시퀀스 다이어그램으로 재생합니다. pcap 파일을 화면에 끌어다 놓아도 됩니다.
     처음이라면 <a href="https://github.com/wnsrud2002/minibox/blob/master/docs/LEARN.md#9-패킷-여행기-화면-읽는-법">화면 읽는 법</a>과
-    <a href="https://github.com/wnsrud2002/minibox/blob/master/docs/LEARN.md#5-tcp-기초-seq-ack-핸드셰이크">TCP 배경지식</a>부터 보세요.</p>
-
-  <div id="drop">
-    <p class="lead">pcap 파일을 여기에 끌어다 놓으세요</p>
-    <input type="file" id="file" accept=".pcap,.cap" aria-label="pcap 파일 고르기">
-    <div class="samples">파일이 없다면 샘플로 시작하세요.
-      <ul>
-        <li><a href="?src=samples/http.pcap">컨테이너 A가 B에 HTTP 요청을 한 번 보낸 기록</a></li>
-        <li><a href="?src=samples/loss10.pcap">패킷 10%가 사라지는 중에 300KB를 보낸 기록</a></li>
-      </ul>
-    </div>
-  </div>
-  <p id="err"></p>
+    <a href="https://github.com/wnsrud2002/minibox/blob/master/docs/LEARN.md#5-tcp-기초-seq-ack-핸드셰이크">TCP 배경지식</a>을 먼저 보세요.</p>
+  <p id="err" role="alert"></p>
 
   <div id="player" hidden>
-    <div class="row">
+    <div class="row flowrow">
       <label>연결 <select id="flow"></select></label>
       <label><input type="checkbox" id="onlyEvents"> 문제 구간만 보기</label>
     </div>
     <div class="tiles" id="tiles"></div>
     <div id="flightWrap"><div class="title"><b>전송 중인 바이트</b>: 보냈지만 아직 ACK를 못 받은 양으로, 혼잡 윈도우를 추정한 값입니다. 세로선은 재전송입니다.</div><svg id="flight" width="100%" height="120"></svg><div class="tip" id="ftip"></div></div>
+    <div class="controls">
     <div class="row">
       <button id="play">▶ 재생</button>
       <button id="prev">◀ 한 칸</button>
       <button id="next">한 칸 ▶</button>
       <button id="all">전부 보기</button>
       <label>속도 <select id="speed"><option value="2">느리게</option><option value="1" selected>보통</option><option value="0.4">빠르게</option><option value="0.08">아주 빠르게</option></select></label>
-      <span id="pos" style="color:var(--text-2)"></span>
+      <span id="pos"></span>
     </div>
     <div class="legend">
       <span><span class="key" style="background:var(--c2s)"></span>클라이언트 → 서버</span>
@@ -123,6 +120,7 @@ tr.cur { background: var(--hl); }
       <span><i class="ico" style="background:var(--critical)">⟲</i>재전송</span>
       <span><i class="ico" style="background:var(--critical)">✕</i>도중에 사라짐(추정)</span>
       <span><i class="ico" style="background:var(--warning)">!</i>중복 ACK</span>
+    </div>
     </div>
     <div id="diagram"></div>
     <div class="tablewrap"><table id="table"></table></div>
@@ -140,7 +138,10 @@ file.onchange = () => file.files[0] && file.files[0].arrayBuffer().then(load);
 drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0]?.arrayBuffer().then(load); };
-const src = new URLSearchParams(location.search).get("src");
+const src = new URLSearchParams(location.search).get("src") ?? "samples/loss10.pcap";
+sample.value = [...sample.options].some(o => o.value === src) ? src : "";
+sample.onchange = () => sample.value ? location.search = "?src=" + sample.value : file.click();
+file.addEventListener("change", () => sample.value = "");
 if (src) fetch(src).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${src}: ${r.status}`))).then(load).catch(e => err.textContent = e.message);
 
 function load(buf) {
@@ -171,13 +172,14 @@ function select(i) {
   summary();
   drawFlight();
   render();
-  go(-1);
+  // 처음엔 전체 흐름을 보여 준다. 재생을 누르면 처음부터 다시 그린다.
+  go(rows.length - 1, false, false);
 }
 
 // 두 호스트를 세로선으로 두고, 패킷마다 한 줄씩 비스듬한 화살표를 긋는다
 function render() {
   const ps = rows;
-  const W = Math.max(640, diagram.clientWidth - 20), L = BAND + 60, R = W - 100;
+  const W = Math.max(640, diagram.clientWidth - 2), L = BAND + 60, R = W - 100;
   const H = TOP + ps.length * ROW + 24;
   let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
   // 단계 띠: 같은 phase가 이어지는 구간마다 왼쪽에 이름을 붙인다
@@ -193,15 +195,15 @@ function render() {
   s += `<line x1="${L}" x2="${L}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/><line x1="${R}" x2="${R}" y1="${TOP}" y2="${H - 8}" stroke="var(--muted)"/>`;
   s += `<defs>${["c2s", "s2c"].map(d => `<marker id="h-${d}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--${d})"/></marker>`).join("")}</defs>`;
   ps.forEach((p, i) => {
-    const y = TOP + i * ROW + 10, [x1, x2full] = p.dir === "c2s" ? [L, R] : [R, L];
+    const ty = TOP + i * ROW + 14, y = TOP + i * ROW + 20, [x1, x2full] = p.dir === "c2s" ? [L, R] : [R, L];
     // 사라진 패킷은 화살표를 절반에서 끊고 ✕를 찍는다
-    const x2 = p.lost ? x1 + (x2full - x1) * 0.3 : x2full, y2 = p.lost ? y + (ROW - 14) * 0.3 : y + ROW - 14;
+    const x2 = p.lost ? x1 + (x2full - x1) * 0.3 : x2full, y2 = p.lost ? y + (ROW - 26) * 0.3 : y + ROW - 26;
     const icon = p.retrans ? ico("critical", "⟲") : p.dup ? ico("warning", "!") : "";
     s += `<g id="p${i}" class="future">
       <line class="arrow" x1="${x1}" y1="${y}" x2="${x2}" y2="${y2}" stroke="var(--${p.dir})" stroke-width="2" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" ${p.lost ? "" : `marker-end="url(#h-${p.dir})"`}/>
       ${p.lost ? `<g transform="translate(${x2},${y2})"><circle r="8" fill="var(--critical)" stroke="var(--sheet)" stroke-width="2"/><text y="4" text-anchor="middle" font-size="11" fill="#fff">✕</text></g>` : ""}
-      <text x="${(L + R) / 2}" y="${y + 8}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--sheet)" stroke-width="4">${icon}${p.label}${p.lost ? " (사라짐)" : ""}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
-      <text x="${W - 8}" y="${y + 8}" text-anchor="end" font-size="11" fill="var(--muted)">+${(p.t * 1000).toFixed(3)}ms</text>
+      <text x="${(L + R) / 2}" y="${ty}" text-anchor="middle" font-size="12" fill="var(--text)" paint-order="stroke" stroke="var(--sheet)" stroke-width="4">${icon}${p.label}${p.lost ? " (사라짐)" : ""}  <tspan fill="var(--text-2)">seq ${p.rseq}${p.rack !== null ? ` · ack ${p.rack}` : ""}</tspan></text>
+      <text x="${W - 8}" y="${ty}" text-anchor="end" font-size="11" fill="var(--muted)">+${(p.t * 1000).toFixed(3)}ms</text>
     </g>`;
   });
   diagram.innerHTML = s + "</svg>";
@@ -211,7 +213,7 @@ function render() {
 }
 
 // go(i): 0..i번 패킷까지 보이게 한다. i번은 화살표가 날아가는 애니메이션으로 그린다.
-function go(i, animate = true) {
+function go(i, animate = true, scroll = true) {
   const ps = rows;
   step = Math.max(-1, Math.min(ps.length - 1, i));
   const dur = 500 * +speed.value;
@@ -224,7 +226,7 @@ function go(i, animate = true) {
     document.getElementById("r" + k).classList.toggle("cur", k === step);
   });
   pos.textContent = `${step + 1} / ${ps.length}`;
-  document.getElementById("p" + Math.max(step, 0)).scrollIntoView({ block: "nearest" });
+  if (scroll) document.getElementById("p" + Math.max(step, 0)).scrollIntoView({ block: "nearest" });
 }
 
 function stop() { clearInterval(timer); timer = null; play.textContent = "▶ 재생"; }
